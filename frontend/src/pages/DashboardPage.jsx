@@ -1,8 +1,29 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import api from "../services/api";
 
 function DashboardPage() {
   const navigate = useNavigate();
   const familyName = localStorage.getItem("familyName");
+  const familyId = localStorage.getItem("familyId");
+
+  const [members, setMembers] = useState([]);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const fetchMembers = async () => {
+      try {
+        const response = await api.get(`/members/family/${familyId}`);
+        setMembers(response.data.data);
+      } catch (error) {
+        setMessage("Erreur lors du chargement des membres");
+      }
+    };
+
+    if (familyId) {
+      fetchMembers();
+    }
+  }, [familyId]);
 
   const handleLogout = () => {
     localStorage.removeItem("familyId");
@@ -12,6 +33,10 @@ function DashboardPage() {
 
   const handleGoToAddMember = () => {
     navigate("/members/add");
+  };
+
+  const handleEditMember = (memberId) => {
+    navigate(`/members/${memberId}/edit`);
   };
 
   return (
@@ -28,26 +53,91 @@ function DashboardPage() {
           Déconnexion
         </button>
       </div>
+
+      <div style={styles.membersSection}>
+        <h2>Membres de la famille</h2>
+
+        {message && <p>{message}</p>}
+
+        {members.length === 0 ? (
+          <p>Aucun membre enregistré pour le moment.</p>
+        ) : (
+          <div style={styles.membersList}>
+            {members.map((member) => (
+              <div key={member.id} style={styles.memberCard}>
+                <div>
+                  <p style={styles.memberName}>{member.name}</p>
+                  <p style={styles.memberInfo}>Rôle : {member.role}</p>
+                  <p style={styles.memberInfo}>
+                    Aiguille n°{member.servoChannel}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => handleEditMember(member.id)}
+                  style={styles.editButton}
+                >
+                  Modifier
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 const styles = {
   container: {
-    maxWidth: "500px",
+    maxWidth: "700px",
     margin: "60px auto",
     padding: "24px",
     textAlign: "center",
   },
   actions: {
     display: "flex",
-    flexDirection: "column",
+    justifyContent: "center",
     gap: "12px",
     marginTop: "24px",
+    marginBottom: "32px",
+    flexWrap: "wrap",
   },
   button: {
     padding: "12px 20px",
     fontSize: "16px",
+    cursor: "pointer",
+  },
+  membersSection: {
+    marginTop: "20px",
+    textAlign: "left",
+  },
+  membersList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+    marginTop: "16px",
+  },
+  memberCard: {
+    border: "1px solid #ccc",
+    borderRadius: "8px",
+    padding: "16px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "16px",
+  },
+  memberName: {
+    margin: 0,
+    fontSize: "18px",
+    fontWeight: "bold",
+  },
+  memberInfo: {
+    margin: "4px 0",
+  },
+  editButton: {
+    padding: "10px 16px",
+    fontSize: "15px",
     cursor: "pointer",
   },
 };
