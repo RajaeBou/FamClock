@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 
 const familyRoutes = require("./routes/family.routes");
+const memberRoutes = require("./routes/member.routes");
 
 const app = express();
 
@@ -13,5 +14,6 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/families", familyRoutes);
+app.use("/api/members", memberRoutes);
 
 module.exports = app;
