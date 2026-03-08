@@ -231,10 +231,6 @@ const getMemberById = (req, res) => {
 /*
 ------------------------------------------------
 Modifier un membre
-- nom modifiable
-- rôle modifiable
-- servo/aiguille modifiable
-- interdiction de prendre un servo déjà utilisé
 ------------------------------------------------
 */
 const updateMember = (req, res) => {
@@ -266,7 +262,11 @@ const updateMember = (req, res) => {
     });
   }
 
-  if (!Number.isInteger(parsedServoChannel) || parsedServoChannel < 0 || parsedServoChannel > 15) {
+  if (
+    !Number.isInteger(parsedServoChannel) ||
+    parsedServoChannel < 0 ||
+    parsedServoChannel > 15
+  ) {
     return res.status(400).json({
       success: false,
       message: "L’aiguille sélectionnée est invalide",
@@ -355,9 +355,45 @@ const updateMember = (req, res) => {
   });
 };
 
+/*
+------------------------------------------------
+Supprimer un membre
+------------------------------------------------
+*/
+const deleteMember = (req, res) => {
+  const { id } = req.params;
+
+  const deleteQuery = `
+    DELETE FROM members
+    WHERE id = ?
+  `;
+
+  db.run(deleteQuery, [id], function (err) {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Erreur lors de la suppression du membre",
+      });
+    }
+
+    if (this.changes === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Membre introuvable",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Membre supprimé avec succès",
+    });
+  });
+};
+
 module.exports = {
   createMember,
   getMembersByFamily,
   getMemberById,
   updateMember,
+  deleteMember,
 };
