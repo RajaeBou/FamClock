@@ -39,6 +39,28 @@ function DashboardPage() {
     navigate(`/members/${memberId}/edit`);
   };
 
+  const handleDeleteMember = async (memberId, memberName) => {
+    const confirmDelete = window.confirm(
+      `Êtes-vous sûr de vouloir supprimer ${memberName} ?`
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      const response = await api.delete(`/members/${memberId}`);
+
+      setMembers((prevMembers) =>
+        prevMembers.filter((member) => member.id !== memberId)
+      );
+
+      setMessage(response.data.message);
+    } catch (error) {
+      setMessage(
+        error.response?.data?.message || "Erreur lors de la suppression"
+      );
+    }
+  };
+
   return (
     <div style={styles.container}>
       <h1>Dashboard</h1>
@@ -57,7 +79,7 @@ function DashboardPage() {
       <div style={styles.membersSection}>
         <h2>Membres de la famille</h2>
 
-        {message && <p>{message}</p>}
+        {message && <p style={styles.message}>{message}</p>}
 
         {members.length === 0 ? (
           <p>Aucun membre enregistré pour le moment.</p>
@@ -73,12 +95,21 @@ function DashboardPage() {
                   </p>
                 </div>
 
-                <button
-                  onClick={() => handleEditMember(member.id)}
-                  style={styles.editButton}
-                >
-                  Modifier
-                </button>
+                <div style={styles.cardActions}>
+                  <button
+                    onClick={() => handleEditMember(member.id)}
+                    style={styles.editButton}
+                  >
+                    Modifier
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteMember(member.id, member.name)}
+                    style={styles.deleteButton}
+                  >
+                    Supprimer
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -135,10 +166,23 @@ const styles = {
   memberInfo: {
     margin: "4px 0",
   },
+  cardActions: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
   editButton: {
     padding: "10px 16px",
     fontSize: "15px",
     cursor: "pointer",
+  },
+  deleteButton: {
+    padding: "10px 16px",
+    fontSize: "15px",
+    cursor: "pointer",
+  },
+  message: {
+    marginBottom: "16px",
   },
 };
 
