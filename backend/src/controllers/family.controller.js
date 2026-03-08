@@ -20,32 +20,57 @@ const createFamily = async (req, res) => {
       });
     }
 
-    const familyId = uuidv4();
-    const pinHash = await bcrypt.hash(pin, 10);
-    const createdAt = new Date().toISOString();
+    const normalizedFamilyName = familyName.trim();
 
-    const query = `
-      INSERT INTO families (id, family_name, pin_hash, created_at)
-      VALUES (?, ?, ?, ?)
+    const checkQuery = `
+      SELECT id
+      FROM families
+      WHERE family_name = ?
     `;
 
-    db.run(query, [familyId, familyName, pinHash, createdAt], function (err) {
-      if (err) {
-        console.error("Erreur insertion famille :", err.message);
+    db.get(checkQuery, [normalizedFamilyName], async (checkErr, existingFamily) => {
+      if (checkErr) {
+        console.error("Erreur vérification famille existante :", checkErr.message);
         return res.status(500).json({
           success: false,
-          message: "Erreur lors de la création de la famille"
+          message: "Erreur serveur"
         });
       }
 
-      return res.status(201).json({
-        success: true,
-        message: "Famille créée avec succès",
-        data: {
-          id: familyId,
-          familyName,
-          createdAt
+      if (existingFamily) {
+        return res.status(409).json({
+          success: false,
+          message: "Une famille avec ce nom existe déjà"
+        });
+      }
+
+      const familyId = uuidv4();
+      const pinHash = await bcrypt.hash(pin, 10);
+      const createdAt = new Date().toISOString();
+
+      const insertQuery = `
+        INSERT INTO families (id, family_name, pin_hash, created_at)
+        VALUES (?, ?, ?, ?)
+      `;
+
+      db.run(insertQuery, [familyId, normalizedFamilyName, pinHash, createdAt], function (err) {
+        if (err) {
+          console.error("Erreur insertion famille :", err.message);
+          return res.status(500).json({
+            success: false,
+            message: "Erreur lors de la création de la famille"
+          });
         }
+
+        return res.status(201).json({
+          success: true,
+          message: "Famille créée avec succès",
+          data: {
+            id: familyId,
+            familyName: normalizedFamilyName,
+            createdAt
+          }
+        });
       });
     });
   } catch (error) {
@@ -68,13 +93,15 @@ const loginFamily = (req, res) => {
       });
     }
 
+    const normalizedFamilyName = familyName.trim();
+
     const query = `
       SELECT id, family_name, pin_hash, created_at
       FROM families
       WHERE family_name = ?
     `;
 
-    db.get(query, [familyName], async (err, family) => {
+    db.get(query, [normalizedFamilyName], async (err, family) => {
       if (err) {
         console.error("Erreur recherche famille :", err.message);
         return res.status(500).json({

@@ -4,7 +4,7 @@ const initDb = () => {
   const createFamiliesTable = `
     CREATE TABLE IF NOT EXISTS families (
       id TEXT PRIMARY KEY,
-      family_name TEXT NOT NULL,
+      family_name TEXT NOT NULL UNIQUE,
       pin_hash TEXT NOT NULL,
       created_at TEXT NOT NULL
     )
