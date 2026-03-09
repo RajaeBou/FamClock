@@ -138,6 +138,67 @@ const getClockPositionsByFamily = (req, res) => {
   });
 };
 
+const updateClockPositionLabel = (req, res) => {
+  const { id } = req.params;
+  const { label } = req.body;
+
+  if (!label || !label.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: "Le nom du lieu est obligatoire",
+    });
+  }
+
+  const trimmedLabel = label.trim();
+
+  const getPositionQuery = `
+    SELECT id, family_id, position_number
+    FROM clock_positions
+    WHERE id = ?
+  `;
+
+  db.get(getPositionQuery, [id], (getErr, positionRow) => {
+    if (getErr) {
+      return res.status(500).json({
+        success: false,
+        message: "Erreur lors de la vérification de la position",
+      });
+    }
+
+    if (!positionRow) {
+      return res.status(404).json({
+        success: false,
+        message: "Emplacement introuvable",
+      });
+    }
+
+    const updateQuery = `
+      UPDATE clock_positions
+      SET label = ?
+      WHERE id = ?
+    `;
+
+    db.run(updateQuery, [trimmedLabel, id], function (updateErr) {
+      if (updateErr) {
+        return res.status(500).json({
+          success: false,
+          message: "Erreur lors de la mise à jour du lieu",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Lieu mis à jour avec succès",
+        data: {
+          id,
+          label: trimmedLabel,
+        },
+      });
+    });
+  });
+};
+
 module.exports = {
   getClockPositionsByFamily,
+  updateClockPositionLabel,
 };
