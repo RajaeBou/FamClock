@@ -5,6 +5,7 @@ import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import AddMemberPage from "./pages/AddMemberPage";
 import EditMemberPage from "./pages/EditMemberPage";
+import ClockConfigPage from "./pages/ClockConfigPage";
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/members/add" element={<AddMemberPage />} />
         <Route path="/members/:id/edit" element={<EditMemberPage />} />
+        <Route path="/clock-config" element={<ClockConfigPage />} />
       </Routes>
     </BrowserRouter>
   );
