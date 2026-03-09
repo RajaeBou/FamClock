@@ -9,6 +9,8 @@ function ClockConfigPage() {
 
   const [positions, setPositions] = useState([]);
   const [message, setMessage] = useState("");
+  const [selectedPosition, setSelectedPosition] = useState(null);
+  const [newLabel, setNewLabel] = useState("");
 
   useEffect(() => {
     const fetchPositions = async () => {
@@ -21,7 +23,9 @@ function ClockConfigPage() {
       }
     };
 
-    if (familyId) fetchPositions();
+    if (familyId) {
+      fetchPositions();
+    }
   }, [familyId]);
 
   const pizzaColors = [
@@ -35,16 +39,43 @@ function ClockConfigPage() {
     "#e9edf2",
   ];
 
-  const labelPositions = [
-    { top: "12%", left: "65%" },
-    { top: "35%", left: "85%" },
-    { top: "65%", left: "85%" },
-    { top: "88%", left: "65%" },
-    { top: "88%", left: "35%" },
-    { top: "65%", left: "15%" },
-    { top: "35%", left: "15%" },
-    { top: "12%", left: "35%" },
-  ];
+  const handleOpenEdit = (position) => {
+    setSelectedPosition(position);
+    setNewLabel(position.label);
+    setMessage("");
+  };
+
+  const handleCloseEdit = () => {
+    setSelectedPosition(null);
+    setNewLabel("");
+  };
+
+  const handleSaveLabel = async (e) => {
+    e.preventDefault();
+
+    if (!selectedPosition) return;
+
+    try {
+      const response = await api.put(`/clock-positions/${selectedPosition.id}`, {
+        label: newLabel,
+      });
+
+      setPositions((prevPositions) =>
+        prevPositions.map((position) =>
+          position.id === selectedPosition.id
+            ? { ...position, label: newLabel.trim() }
+            : position
+        )
+      );
+
+      setMessage(response.data.message);
+      handleCloseEdit();
+    } catch (error) {
+      setMessage(
+        error.response?.data?.message || "Erreur lors de la mise à jour"
+      );
+    }
+  };
 
   return (
     <div style={styles.container}>
@@ -62,7 +93,7 @@ function ClockConfigPage() {
         </button>
       </div>
 
-      {message && <p>{message}</p>}
+      {message && <p style={styles.message}>{message}</p>}
 
       {positions.length > 0 && (
         <>
@@ -82,19 +113,32 @@ function ClockConfigPage() {
                 />
               ))}
 
-              {positions.slice(0, 8).map((position, index) => (
-                <div
-                  key={position.id + "-label"}
-                  style={{
-                    ...styles.label,
-                    top: labelPositions[index].top,
-                    left: labelPositions[index].left,
-                  }}
-                >
-                  <strong>P{position.positionNumber}</strong>
-                  <div>{position.label}</div>
-                </div>
-              ))}
+              {positions.slice(0, 8).map((position, index) => {
+                const angle = index * 45 - 67.5;
+                const radius = 180;
+                const center = 260;
+
+                const x = center + radius * Math.cos((angle * Math.PI) / 180);
+                const y = center + radius * Math.sin((angle * Math.PI) / 180);
+
+                return (
+                  <button
+                    key={position.id + "-label"}
+                    type="button"
+                    onClick={() => handleOpenEdit(position)}
+                    style={{
+                      ...styles.label,
+                      left: `${x}px`,
+                      top: `${y}px`,
+                    }}
+                  >
+                    <div style={styles.positionNumber}>
+                      P{position.positionNumber}
+                    </div>
+                    <div style={styles.positionText}>{position.label}</div>
+                  </button>
+                );
+              })}
 
               <div style={styles.separatorVertical}></div>
               <div style={styles.separatorHorizontal}></div>
@@ -113,18 +157,61 @@ function ClockConfigPage() {
             <div style={styles.list}>
               {positions.map((position) => (
                 <div key={position.id} style={styles.card}>
-                  <p style={styles.cardTitle}>
-                    Position {position.positionNumber}
-                  </p>
+                  <div style={styles.cardHeader}>
+                    <div>
+                      <p style={styles.cardTitle}>
+                        Position {position.positionNumber}
+                      </p>
+                      <p style={styles.cardText}>
+                        Lieu associé : {position.label}
+                      </p>
+                    </div>
 
-                  <p style={styles.cardText}>
-                    Lieu associé : {position.label}
-                  </p>
+                    <button
+                      onClick={() => handleOpenEdit(position)}
+                      style={styles.editButton}
+                    >
+                      Modifier
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         </>
+      )}
+
+      {selectedPosition && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modal}>
+            <h2>Modifier un emplacement</h2>
+            <p>Position {selectedPosition.positionNumber}</p>
+
+            <form onSubmit={handleSaveLabel} style={styles.form}>
+              <input
+                type="text"
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                placeholder="Nom du lieu"
+                style={styles.input}
+              />
+
+              <div style={styles.modalActions}>
+                <button type="submit" style={styles.saveButton}>
+                  Enregistrer
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCloseEdit}
+                  style={styles.cancelButton}
+                >
+                  Annuler
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -146,6 +233,11 @@ const styles = {
     padding: "12px 20px",
     fontSize: "16px",
     cursor: "pointer",
+  },
+
+  message: {
+    marginTop: "16px",
+    marginBottom: "16px",
   },
 
   pizzaWrapper: {
@@ -175,8 +267,24 @@ const styles = {
     position: "absolute",
     transform: "translate(-50%, -50%)",
     textAlign: "center",
-    fontSize: "16px",
     color: "#111",
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    width: "110px",
+    padding: "4px 8px",
+    lineHeight: "1.3",
+  },
+
+  positionNumber: {
+    fontWeight: "700",
+    marginBottom: "6px",
+    fontSize: "17px",
+  },
+
+  positionText: {
+    fontSize: "20px",
+    fontWeight: "500",
   },
 
   separatorVertical: {
@@ -258,6 +366,13 @@ const styles = {
     padding: "14px",
   },
 
+  cardHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "16px",
+  },
+
   cardTitle: {
     margin: 0,
     fontWeight: "bold",
@@ -266,6 +381,62 @@ const styles = {
 
   cardText: {
     margin: "8px 0 0 0",
+  },
+
+  editButton: {
+    padding: "10px 16px",
+    fontSize: "15px",
+    cursor: "pointer",
+  },
+
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+  },
+
+  modal: {
+    backgroundColor: "#fff",
+    color: "#111",
+    padding: "24px",
+    borderRadius: "12px",
+    width: "90%",
+    maxWidth: "420px",
+    textAlign: "center",
+  },
+
+  form: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "14px",
+    marginTop: "16px",
+  },
+
+  input: {
+    padding: "12px",
+    fontSize: "16px",
+  },
+
+  modalActions: {
+    display: "flex",
+    justifyContent: "center",
+    gap: "12px",
+  },
+
+  saveButton: {
+    padding: "10px 16px",
+    fontSize: "15px",
+    cursor: "pointer",
+  },
+
+  cancelButton: {
+    padding: "10px 16px",
+    fontSize: "15px",
+    cursor: "pointer",
   },
 };
 
