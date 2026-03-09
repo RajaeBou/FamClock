@@ -35,6 +35,10 @@ function DashboardPage() {
     navigate("/members/add");
   };
 
+  const handleGoToClockConfig = () => {
+    navigate("/clock-config");
+  };
+
   const handleEditMember = (memberId) => {
     navigate(`/members/${memberId}/edit`);
   };
@@ -69,6 +73,10 @@ function DashboardPage() {
       <div style={styles.actions}>
         <button onClick={handleGoToAddMember} style={styles.button}>
           Ajouter un membre
+        </button>
+
+        <button onClick={handleGoToClockConfig} style={styles.button}>
+          Configurer l’horloge
         </button>
 
         <button onClick={handleLogout} style={styles.button}>
