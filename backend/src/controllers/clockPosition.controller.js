@@ -198,7 +198,162 @@ const updateClockPositionLabel = (req, res) => {
   });
 };
 
+const reorderClockPositions = (req, res) => {
+  const { familyId, sourcePosition, targetPosition } = req.body;
+
+  if (!familyId) {
+    return res.status(400).json({
+      success: false,
+      message: "familyId est obligatoire",
+    });
+  }
+
+  if (
+    typeof sourcePosition !== "number" ||
+    typeof targetPosition !== "number"
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "sourcePosition et targetPosition doivent être des nombres",
+    });
+  }
+
+  if (sourcePosition === targetPosition) {
+    return res.status(400).json({
+      success: false,
+      message: "Les deux positions doivent être différentes",
+    });
+  }
+
+  const checkFamilyQuery = `
+    SELECT id
+    FROM families
+    WHERE id = ?
+  `;
+
+  db.get(checkFamilyQuery, [familyId], (familyErr, familyRow) => {
+    if (familyErr) {
+      return res.status(500).json({
+        success: false,
+        message: "Erreur serveur lors de la vérification de la famille",
+      });
+    }
+
+    if (!familyRow) {
+      return res.status(404).json({
+        success: false,
+        message: "Famille introuvable",
+      });
+    }
+
+    ensureDefaultPositionsForFamily(familyId, (ensureErr) => {
+      if (ensureErr) {
+        return res.status(500).json({
+          success: false,
+          message: "Erreur lors de l'initialisation des positions",
+        });
+      }
+
+      const getPositionsQuery = `
+        SELECT id, family_id, position_number, label, angle
+        FROM clock_positions
+        WHERE family_id = ?
+          AND position_number IN (?, ?)
+        ORDER BY position_number ASC
+      `;
+
+      db.all(
+        getPositionsQuery,
+        [familyId, sourcePosition, targetPosition],
+        (getErr, rows) => {
+          if (getErr) {
+            return res.status(500).json({
+              success: false,
+              message: "Erreur lors de la récupération des positions",
+            });
+          }
+
+          if (!rows || rows.length !== 2) {
+            return res.status(404).json({
+              success: false,
+              message: "Une ou plusieurs positions sont introuvables",
+            });
+          }
+
+          const sourceRow = rows.find(
+            (row) => row.position_number === sourcePosition
+          );
+          const targetRow = rows.find(
+            (row) => row.position_number === targetPosition
+          );
+
+          if (!sourceRow || !targetRow) {
+            return res.status(404).json({
+              success: false,
+              message: "Impossible de retrouver les positions à échanger",
+            });
+          }
+
+          const updateQuery = `
+            UPDATE clock_positions
+            SET label = ?
+            WHERE family_id = ? AND position_number = ?
+          `;
+
+          db.run(
+            updateQuery,
+            [targetRow.label, familyId, sourcePosition],
+            function (firstUpdateErr) {
+              if (firstUpdateErr) {
+                return res.status(500).json({
+                  success: false,
+                  message: "Erreur lors de la mise à jour de la première position",
+                });
+              }
+
+              db.run(
+                updateQuery,
+                [sourceRow.label, familyId, targetPosition],
+                function (secondUpdateErr) {
+                  if (secondUpdateErr) {
+                    return res.status(500).json({
+                      success: false,
+                      message:
+                        "Erreur lors de la mise à jour de la deuxième position",
+                    });
+                  }
+
+                  return res.status(200).json({
+                    success: true,
+                    message: "Emplacements réorganisés avec succès",
+                    data: {
+                      familyId,
+                      sourcePosition,
+                      targetPosition,
+                      updatedPositions: [
+                        {
+                          positionNumber: sourcePosition,
+                          label: targetRow.label,
+                        },
+                        {
+                          positionNumber: targetPosition,
+                          label: sourceRow.label,
+                        },
+                      ],
+                    },
+                  });
+                }
+              );
+            }
+          );
+        }
+      );
+    });
+  });
+};
+
 module.exports = {
   getClockPositionsByFamily,
   updateClockPositionLabel,
+  reorderClockPositions,
 };
