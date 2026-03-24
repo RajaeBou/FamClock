@@ -11,6 +11,7 @@ function ClockConfigPage() {
   const [message, setMessage] = useState("");
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [newLabel, setNewLabel] = useState("");
+  const [editError, setEditError] = useState("");
 
   const [selectedSwapPosition, setSelectedSwapPosition] = useState(null);
   const [targetPositionNumber, setTargetPositionNumber] = useState("");
@@ -45,18 +46,22 @@ function ClockConfigPage() {
   const handleOpenEdit = (position) => {
     setSelectedPosition(position);
     setNewLabel(position.label);
+    setEditError("");
     setMessage("");
   };
 
   const handleCloseEdit = () => {
     setSelectedPosition(null);
     setNewLabel("");
+    setEditError("");
   };
 
   const handleSaveLabel = async (e) => {
     e.preventDefault();
 
     if (!selectedPosition) return;
+
+    setEditError("");
 
     try {
       const response = await api.put(`/clock-positions/${selectedPosition.id}`, {
@@ -74,9 +79,11 @@ function ClockConfigPage() {
       setMessage(response.data.message);
       handleCloseEdit();
     } catch (error) {
-      setMessage(
-        error.response?.data?.message || "Erreur lors de la mise à jour"
-      );
+      const backendMessage =
+        error.response?.data?.message || "Erreur lors de la mise à jour";
+
+      setEditError(backendMessage);
+      console.error("Erreur updateClockPositionLabel :", error.response || error);
     }
   };
 
@@ -242,6 +249,8 @@ function ClockConfigPage() {
             <h2>Modifier un emplacement</h2>
             <p>Position {selectedPosition.positionNumber}</p>
 
+            {editError && <p style={styles.errorText}>{editError}</p>}
+
             <form onSubmit={handleSaveLabel} style={styles.form}>
               <input
                 type="text"
@@ -349,6 +358,13 @@ const styles = {
     marginTop: "16px",
     marginBottom: "16px",
     fontWeight: "500",
+  },
+
+  errorText: {
+    color: "#c62828",
+    fontWeight: "600",
+    marginTop: "12px",
+    marginBottom: "8px",
   },
 
   pizzaWrapper: {
@@ -534,7 +550,7 @@ const styles = {
     padding: "24px",
     borderRadius: "12px",
     width: "90%",
-    maxWidth: "420px",
+    maxWidth: "500px",
     textAlign: "center",
   },
 

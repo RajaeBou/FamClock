@@ -172,29 +172,58 @@ const updateClockPositionLabel = (req, res) => {
       });
     }
 
-    const updateQuery = `
-      UPDATE clock_positions
-      SET label = ?
-      WHERE id = ?
+    const checkDuplicateQuery = `
+      SELECT id
+      FROM clock_positions
+      WHERE family_id = ?
+        AND LOWER(label) = LOWER(?)
+        AND id != ?
     `;
 
-    db.run(updateQuery, [trimmedLabel, id], function (updateErr) {
-      if (updateErr) {
-        return res.status(500).json({
-          success: false,
-          message: "Erreur lors de la mise à jour du lieu",
+    db.get(
+      checkDuplicateQuery,
+      [positionRow.family_id, trimmedLabel, id],
+      (dupErr, dupRow) => {
+        if (dupErr) {
+          return res.status(500).json({
+            success: false,
+            message: "Erreur lors de la vérification du doublon",
+          });
+        }
+
+        if (dupRow) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Ce lieu existe déjà sur le cadran. Utilisez la réorganisation pour le déplacer.",
+          });
+        }
+
+        const updateQuery = `
+          UPDATE clock_positions
+          SET label = ?
+          WHERE id = ?
+        `;
+
+        db.run(updateQuery, [trimmedLabel, id], function (updateErr) {
+          if (updateErr) {
+            return res.status(500).json({
+              success: false,
+              message: "Erreur lors de la mise à jour du lieu",
+            });
+          }
+
+          return res.status(200).json({
+            success: true,
+            message: "Lieu mis à jour avec succès",
+            data: {
+              id,
+              label: trimmedLabel,
+            },
+          });
         });
       }
-
-      return res.status(200).json({
-        success: true,
-        message: "Lieu mis à jour avec succès",
-        data: {
-          id,
-          label: trimmedLabel,
-        },
-      });
-    });
+    );
   });
 };
 
