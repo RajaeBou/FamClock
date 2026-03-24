@@ -12,17 +12,20 @@ function ClockConfigPage() {
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [newLabel, setNewLabel] = useState("");
 
-  useEffect(() => {
-    const fetchPositions = async () => {
-      try {
-        const response = await api.get(`/clock-positions/family/${familyId}`);
-        setPositions(response.data.data || []);
-      } catch (error) {
-        console.error(error);
-        setMessage("Erreur lors du chargement des emplacements");
-      }
-    };
+  const [selectedSwapPosition, setSelectedSwapPosition] = useState(null);
+  const [targetPositionNumber, setTargetPositionNumber] = useState("");
 
+  const fetchPositions = async () => {
+    try {
+      const response = await api.get(`/clock-positions/family/${familyId}`);
+      setPositions(response.data.data || []);
+    } catch (error) {
+      console.error(error);
+      setMessage("Erreur lors du chargement des emplacements");
+    }
+  };
+
+  useEffect(() => {
     if (familyId) {
       fetchPositions();
     }
@@ -73,6 +76,46 @@ function ClockConfigPage() {
     } catch (error) {
       setMessage(
         error.response?.data?.message || "Erreur lors de la mise à jour"
+      );
+    }
+  };
+
+  const handleOpenSwap = (position) => {
+    setSelectedSwapPosition(position);
+    setTargetPositionNumber("");
+    setMessage("");
+  };
+
+  const handleCloseSwap = () => {
+    setSelectedSwapPosition(null);
+    setTargetPositionNumber("");
+  };
+
+  const handleReorderPositions = async (e) => {
+    e.preventDefault();
+
+    if (!selectedSwapPosition) return;
+
+    const parsedTarget = Number(targetPositionNumber);
+
+    if (!parsedTarget) {
+      setMessage("Veuillez sélectionner une position cible");
+      return;
+    }
+
+    try {
+      const response = await api.put("/clock-positions/reorder", {
+        familyId,
+        sourcePosition: selectedSwapPosition.positionNumber,
+        targetPosition: parsedTarget,
+      });
+
+      setMessage(response.data.message);
+      handleCloseSwap();
+      await fetchPositions();
+    } catch (error) {
+      setMessage(
+        error.response?.data?.message || "Erreur lors de la réorganisation"
       );
     }
   };
@@ -165,14 +208,26 @@ function ClockConfigPage() {
                       <p style={styles.cardText}>
                         Lieu associé : {position.label}
                       </p>
+                      <p style={styles.cardAngle}>
+                        Angle physique : {position.angle}°
+                      </p>
                     </div>
 
-                    <button
-                      onClick={() => handleOpenEdit(position)}
-                      style={styles.editButton}
-                    >
-                      Modifier
-                    </button>
+                    <div style={styles.cardButtons}>
+                      <button
+                        onClick={() => handleOpenEdit(position)}
+                        style={styles.editButton}
+                      >
+                        Modifier
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenSwap(position)}
+                        style={styles.swapButton}
+                      >
+                        Réorganiser
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -213,6 +268,61 @@ function ClockConfigPage() {
           </div>
         </div>
       )}
+
+      {selectedSwapPosition && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modal}>
+            <h2>Réorganiser un emplacement</h2>
+            <p>
+              Vous allez déplacer <strong>{selectedSwapPosition.label}</strong>{" "}
+              depuis la position{" "}
+              <strong>P{selectedSwapPosition.positionNumber}</strong>.
+            </p>
+
+            <form onSubmit={handleReorderPositions} style={styles.form}>
+              <label style={styles.selectLabel}>
+                Choisir la position cible :
+              </label>
+
+              <select
+                value={targetPositionNumber}
+                onChange={(e) => setTargetPositionNumber(e.target.value)}
+                style={styles.input}
+              >
+                <option value="">-- Sélectionner --</option>
+                {positions
+                  .filter(
+                    (position) =>
+                      position.positionNumber !==
+                      selectedSwapPosition.positionNumber
+                  )
+                  .map((position) => (
+                    <option
+                      key={position.id}
+                      value={position.positionNumber}
+                    >
+                      P{position.positionNumber} - {position.label}
+                    </option>
+                  ))}
+              </select>
+
+              <div style={styles.modalActions}>
+                <button type="submit" style={styles.saveButton}>
+                  Confirmer
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCloseSwap}
+                  style={styles.cancelButton}
+                >
+                  Annuler
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -238,6 +348,7 @@ const styles = {
   message: {
     marginTop: "16px",
     marginBottom: "16px",
+    fontWeight: "500",
   },
 
   pizzaWrapper: {
@@ -383,7 +494,25 @@ const styles = {
     margin: "8px 0 0 0",
   },
 
+  cardAngle: {
+    margin: "8px 0 0 0",
+    color: "#666",
+    fontSize: "14px",
+  },
+
+  cardButtons: {
+    display: "flex",
+    gap: "10px",
+    flexWrap: "wrap",
+  },
+
   editButton: {
+    padding: "10px 16px",
+    fontSize: "15px",
+    cursor: "pointer",
+  },
+
+  swapButton: {
     padding: "10px 16px",
     fontSize: "15px",
     cursor: "pointer",
@@ -419,6 +548,11 @@ const styles = {
   input: {
     padding: "12px",
     fontSize: "16px",
+  },
+
+  selectLabel: {
+    textAlign: "left",
+    fontWeight: "500",
   },
 
   modalActions: {
