@@ -19,6 +19,6 @@ app.get("/", (req, res) => {
 app.use("/api/families", familyRoutes);
 app.use("/api/members", memberRoutes);
 app.use("/api/clock-positions", clockPositionRoutes);
-app.use("/schedule-rules", scheduleRoutes);
+app.use("/api/schedule-rules", scheduleRoutes);
 
 module.exports = app;

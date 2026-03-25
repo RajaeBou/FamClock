@@ -2,14 +2,8 @@ const db = require("../config/db");
 const { v4: uuidv4 } = require("uuid");
 
 const createScheduleRule = (req, res) => {
-  const {
-    familyId,
-    memberId,
-    dayOfWeek,
-    startTime,
-    endTime,
-    positionId,
-  } = req.body;
+  const { familyId, memberId, dayOfWeek, startTime, endTime, positionId } =
+    req.body;
 
   if (
     !familyId ||
@@ -25,13 +19,20 @@ const createScheduleRule = (req, res) => {
     });
   }
 
-  // ⭐ 1️⃣ vérifier chevauchement
+  if (startTime >= endTime) {
+    return res.status(400).json({
+      success: false,
+      message: "L'heure de début doit être inférieure à l'heure de fin",
+    });
+  }
+
   const overlapSql = `
-    SELECT * FROM schedule_rules
+    SELECT *
+    FROM schedule_rules
     WHERE member_id = ?
-    AND day_of_week = ?
-    AND start_time < ?
-    AND end_time > ?
+      AND day_of_week = ?
+      AND start_time < ?
+      AND end_time > ?
   `;
 
   db.get(
@@ -39,6 +40,7 @@ const createScheduleRule = (req, res) => {
     [memberId, dayOfWeek, endTime, startTime],
     (err, existingRule) => {
       if (err) {
+        console.error("Erreur vérification chevauchement :", err.message);
         return res.status(500).json({
           success: false,
           message: "Erreur vérification chevauchement",
@@ -52,9 +54,17 @@ const createScheduleRule = (req, res) => {
         });
       }
 
-      // ⭐ 2️⃣ insertion normale
       const id = uuidv4();
       const createdAt = new Date().toISOString();
+
+      console.log("Création règle :", {
+        familyId,
+        memberId,
+        dayOfWeek,
+        startTime,
+        endTime,
+        positionId,
+      });
 
       const insertSql = `
         INSERT INTO schedule_rules (
@@ -84,24 +94,24 @@ const createScheduleRule = (req, res) => {
         ],
         function (err) {
           if (err) {
+            console.error("Erreur SQL création règle :", err.message);
             return res.status(500).json({
               success: false,
-              message: "Erreur création règle",
+              message: err.message,
             });
           }
 
           return res.status(201).json({
             success: true,
             message: "Règle créée",
+            ruleId: id,
           });
         }
       );
     }
   );
 };
-//
-// ✅ US-4.1 — créer une règle horaire
-//ime, positionId, createdAt],ssage);
+
 const getScheduleRulesByMember = (req, res) => {
   const { memberId } = req.params;
 
@@ -111,6 +121,7 @@ const getScheduleRulesByMember = (req, res) => {
       sr.day_of_week,
       sr.start_time,
       sr.end_time,
+      sr.position_id,
       cp.label AS position_label
     FROM schedule_rules sr
     JOIN clock_positions cp ON cp.id = sr.position_id
@@ -138,11 +149,8 @@ const getActiveScheduleRule = (req, res) => {
   const { memberId } = req.params;
 
   const now = new Date();
-
-  // 0 = dimanche, 1 = lundi ...
   const dayOfWeek = now.getDay();
-
-  const currentTime = now.toTimeString().slice(0, 5); // HH:MM
+  const currentTime = now.toTimeString().slice(0, 5);
 
   const sql = `
     SELECT 
@@ -150,6 +158,7 @@ const getActiveScheduleRule = (req, res) => {
       sr.day_of_week,
       sr.start_time,
       sr.end_time,
+      sr.position_id,
       cp.label AS position_label,
       cp.angle AS position_angle
     FROM schedule_rules sr
@@ -163,10 +172,10 @@ const getActiveScheduleRule = (req, res) => {
 
   db.get(sql, [memberId, dayOfWeek, currentTime, currentTime], (err, row) => {
     if (err) {
-      console.error(err);
+      console.error("Erreur récupération règle active :", err.message);
       return res.status(500).json({
         success: false,
-        message: "Erreur récupération règle active"
+        message: "Erreur récupération règle active",
       });
     }
 
@@ -174,13 +183,13 @@ const getActiveScheduleRule = (req, res) => {
       return res.json({
         success: true,
         activeRule: null,
-        message: "Aucune règle active"
+        message: "Aucune règle active",
       });
     }
 
     return res.json({
       success: true,
-      activeRule: row
+      activeRule: row,
     });
   });
 };
@@ -188,5 +197,5 @@ const getActiveScheduleRule = (req, res) => {
 module.exports = {
   createScheduleRule,
   getScheduleRulesByMember,
-  getActiveScheduleRule
+  getActiveScheduleRule,
 };

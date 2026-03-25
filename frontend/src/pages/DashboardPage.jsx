@@ -43,6 +43,10 @@ function DashboardPage() {
     navigate(`/members/${memberId}/edit`);
   };
 
+  const handleGoToPlanning = () => {
+  navigate("/planning");
+};
+
   const handleDeleteMember = async (memberId, memberName) => {
     const confirmDelete = window.confirm(
       `Êtes-vous sûr de vouloir supprimer ${memberName} ?`
@@ -82,6 +86,9 @@ function DashboardPage() {
         <button onClick={handleLogout} style={styles.button}>
           Déconnexion
         </button>
+        <button onClick={handleGoToPlanning} style={styles.button}>
+  Gérer le planning
+</button>
       </div>
 
       <div style={styles.membersSection}>
