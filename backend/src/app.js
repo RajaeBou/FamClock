@@ -4,7 +4,7 @@ const cors = require("cors");
 const familyRoutes = require("./routes/family.routes");
 const memberRoutes = require("./routes/member.routes");
 const clockPositionRoutes = require("./routes/clockPosition.routes");
-const scheduleRoutes = require("./routes/scheduleRoutes");
+const scheduleRoutes = require("./routes/schedule.routes");
 
 
 const app = express();
