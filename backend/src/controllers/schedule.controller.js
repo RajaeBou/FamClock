@@ -134,7 +134,59 @@ const getScheduleRulesByMember = (req, res) => {
   });
 };
 
+const getActiveScheduleRule = (req, res) => {
+  const { memberId } = req.params;
+
+  const now = new Date();
+
+  // 0 = dimanche, 1 = lundi ...
+  const dayOfWeek = now.getDay();
+
+  const currentTime = now.toTimeString().slice(0, 5); // HH:MM
+
+  const sql = `
+    SELECT 
+      sr.id,
+      sr.day_of_week,
+      sr.start_time,
+      sr.end_time,
+      cp.label AS position_label,
+      cp.angle AS position_angle
+    FROM schedule_rules sr
+    JOIN clock_positions cp ON cp.id = sr.position_id
+    WHERE sr.member_id = ?
+      AND sr.day_of_week = ?
+      AND sr.start_time <= ?
+      AND sr.end_time > ?
+    LIMIT 1
+  `;
+
+  db.get(sql, [memberId, dayOfWeek, currentTime, currentTime], (err, row) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({
+        success: false,
+        message: "Erreur récupération règle active"
+      });
+    }
+
+    if (!row) {
+      return res.json({
+        success: true,
+        activeRule: null,
+        message: "Aucune règle active"
+      });
+    }
+
+    return res.json({
+      success: true,
+      activeRule: row
+    });
+  });
+};
+
 module.exports = {
   createScheduleRule,
   getScheduleRulesByMember,
+  getActiveScheduleRule
 };
