@@ -35,6 +35,22 @@ const initDb = () => {
     )
   `;
 
+  const createScheduleRulesTable = `
+  CREATE TABLE IF NOT EXISTS schedule_rules (
+    id TEXT PRIMARY KEY,
+    family_id TEXT NOT NULL,
+    member_id TEXT NOT NULL,
+    day_of_week INTEGER NOT NULL,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    position_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (family_id) REFERENCES families(id),
+    FOREIGN KEY (member_id) REFERENCES members(id),
+    FOREIGN KEY (position_id) REFERENCES clock_positions(id)
+  )
+`;
+
   db.run(createFamiliesTable, (err) => {
     if (err) {
       console.error("Erreur création table families :", err.message);
@@ -58,6 +74,15 @@ const initDb = () => {
       console.log("Table clock_positions prête");
     }
   });
+
+  db.run(createScheduleRulesTable, (err) => {
+  if (err) {
+    console.error("Erreur création table schedule_rules :", err.message);
+  } else {
+    console.log("Table schedule_rules prête");
+  }
+});
+
 };
 
 module.exports = initDb;
