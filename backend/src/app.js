@@ -4,6 +4,8 @@ const cors = require("cors");
 const familyRoutes = require("./routes/family.routes");
 const memberRoutes = require("./routes/member.routes");
 const clockPositionRoutes = require("./routes/clockPosition.routes");
+const scheduleRoutes = require("./routes/scheduleRoutes");
+
 
 const app = express();
 
@@ -17,5 +19,6 @@ app.get("/", (req, res) => {
 app.use("/api/families", familyRoutes);
 app.use("/api/members", memberRoutes);
 app.use("/api/clock-positions", clockPositionRoutes);
+app.use("/schedule-rules", scheduleRoutes);
 
 module.exports = app;
