@@ -1,7 +1,5 @@
 const { buildStartupClockConfig } = require("../services/startupClock.service");
 
-console.log("startupClock service type =", typeof buildStartupClockConfig);
-
 async function getClockStartupConfig(req, res) {
   try {
     const familyId = req.query.familyId || null;

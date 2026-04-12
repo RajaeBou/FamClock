@@ -3,8 +3,8 @@ import os
 BACKEND_BASE_URL = os.getenv("FAMCLOCK_API_URL", "http://localhost:3000/api")
 STARTUP_CONFIG_ENDPOINT = f"{BACKEND_BASE_URL}/startup/clock-config"
 
-# Family ID fixé temporairement pour les tests
-FAMILY_ID = "db7d3797-79c8-4c73-9033-5266d9e4086d"
+# Optionnel : famille par défaut si aucune n'est enregistrée localement
+DEFAULT_FAMILY_ID = os.getenv("FAMCLOCK_FAMILY_ID", "").strip() or None
 
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "10"))
 
@@ -19,3 +19,7 @@ MOVE_DELAY_SECONDS = float(os.getenv("MOVE_DELAY_SECONDS", "0.8"))
 # 1 = test sans vrai matériel
 # 0 = vrai servo
 USE_MOCK_SERVO = os.getenv("USE_MOCK_SERVO", "1") == "1"
+
+FLASK_HOST = os.getenv("FLASK_HOST", "0.0.0.0")
+FLASK_PORT = int(os.getenv("FLASK_PORT", "5050"))
+FLASK_DEBUG = os.getenv("FLASK_DEBUG", "1") == "1"
