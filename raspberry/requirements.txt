@@ -1,3 +1,4 @@
 requests
 adafruit-circuitpython-servokit
 flask
+pyserial
