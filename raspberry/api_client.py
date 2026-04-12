@@ -1,12 +1,12 @@
 import requests
-from config import STARTUP_CONFIG_ENDPOINT, REQUEST_TIMEOUT_SECONDS, FAMILY_ID
+from config import STARTUP_CONFIG_ENDPOINT, REQUEST_TIMEOUT_SECONDS
 
 
-def fetch_startup_config():
+def fetch_startup_config(family_id=None):
     params = {}
 
-    if FAMILY_ID:
-        params["familyId"] = FAMILY_ID
+    if family_id:
+        params["familyId"] = family_id
 
     try:
         response = requests.get(
@@ -19,17 +19,15 @@ def fetch_startup_config():
             f"Impossible de contacter le backend à {STARTUP_CONFIG_ENDPOINT} : {exc}"
         ) from exc
 
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = response.text
+
     if not response.ok:
-        try:
-            error_payload = response.json()
-        except ValueError:
-            error_payload = response.text
-
         raise RuntimeError(
-            f"Erreur backend {response.status_code} sur {response.url} : {error_payload}"
+            f"Erreur backend {response.status_code} sur {response.url} : {payload}"
         )
-
-    payload = response.json()
 
     if not payload.get("success"):
         raise RuntimeError(f"Réponse backend invalide : {payload}")
