@@ -3,13 +3,13 @@ const { v4: uuidv4 } = require("uuid");
 
 const DEFAULT_POSITIONS = [
   { positionNumber: 1, label: "Maison", angle: 0 },
-  { positionNumber: 2, label: "École", angle: 45 },
-  { positionNumber: 3, label: "Travail", angle: 90 },
-  { positionNumber: 4, label: "Sport", angle: 135 },
-  { positionNumber: 5, label: "Activité", angle: 180 },
-  { positionNumber: 6, label: "Autre", angle: 225 },
-  { positionNumber: 7, label: "Libre", angle: 270 },
-  { positionNumber: 8, label: "Libre", angle: 315 },
+  { positionNumber: 2, label: "École", angle: 22.5 },
+  { positionNumber: 3, label: "Travail", angle: 45 },
+  { positionNumber: 4, label: "Sport", angle: 65.5 },
+  { positionNumber: 5, label: "Activité", angle: 90 },
+  { positionNumber: 6, label: "Autre", angle: 110.5 },
+  { positionNumber: 7, label: "Libre", angle: 135 },
+  { positionNumber: 8, label: "Libre", angle: 157.5 },
 ];
 
 const ensureDefaultPositionsForFamily = (familyId, callback) => {

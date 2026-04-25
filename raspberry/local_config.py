@@ -29,3 +29,27 @@ def save_family_id(family_id):
     data = load_local_config()
     data["familyId"] = family_id
     save_local_config(data)
+
+
+def load_auto_sync_config():
+    data = load_local_config()
+    return {
+        "memberName": data.get("memberName"),
+        "intervalSeconds": int(data.get("intervalSeconds", 15)),
+        "enabled": bool(data.get("enabled", False)),
+    }
+
+
+def save_auto_sync_config(member_name=None, interval_seconds=None, enabled=None):
+    data = load_local_config()
+
+    if member_name is not None:
+        data["memberName"] = member_name
+
+    if interval_seconds is not None:
+        data["intervalSeconds"] = int(interval_seconds)
+
+    if enabled is not None:
+        data["enabled"] = bool(enabled)
+
+    save_local_config(data)
