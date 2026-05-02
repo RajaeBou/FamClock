@@ -1,7 +1,16 @@
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
+const fs = require("fs");
 
-const dbPath = path.resolve(process.env.DB_PATH || "./src/database/famclock.sqlite");
+const dbPath = process.env.DB_PATH
+  ? process.env.DB_PATH
+  : path.resolve("./src/database/famclock.sqlite");
+
+const dbDir = path.dirname(dbPath);
+
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
 
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
