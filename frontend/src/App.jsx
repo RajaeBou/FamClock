@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+
+import SplashScreen from "./components/SplashScreen";
 
 import HomePage from "./pages/HomePage";
 import CreateFamilyPage from "./pages/CreateFamilyPage";
@@ -20,6 +23,20 @@ function ProtectedRoute({ children }) {
 }
 
 function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (showSplash) {
+    return <SplashScreen />;
+  }
+
   return (
     <BrowserRouter>
       <Routes>

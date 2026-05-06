@@ -1,0 +1,45 @@
+.logo-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+.animated-logo {
+  width: 280px;
+  max-width: 80vw;
+  height: auto;
+  opacity: 0;
+  transform: translateY(25px) scale(0.92);
+  animation:
+    logoIntro 1.3s ease-out forwards,
+    logoFloat 4s ease-in-out 1.3s infinite;
+  filter: drop-shadow(0 10px 22px rgba(120, 120, 120, 0.12));
+}
+
+@keyframes logoIntro {
+  0% {
+    opacity: 0;
+    transform: translateY(25px) scale(0.92);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes logoFloat {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
