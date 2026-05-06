@@ -152,6 +152,15 @@ function PlanningPage() {
     selectedMember?.role?.toLowerCase?.().includes("parent")
   );
 
+  const isManualOnly = formData.planningMode === "manual_only";
+  const isExternalOnly = formData.planningMode === "external_only";
+  const isHybrid = formData.planningMode === "hybrid";
+
+  const showExternalProvider =
+    isSelectedMemberParent && (isExternalOnly || isHybrid);
+
+  const showManualForm = !isSelectedMemberParent || isManualOnly || isHybrid;
+
   const selectedPlanningMode = planningModeOptions.find(
     (mode) => mode.value === formData.planningMode
   );
@@ -229,9 +238,13 @@ function PlanningPage() {
         const loadedPositions =
           positionsResponse.data.data || positionsResponse.data.positions || [];
 
-        const sortedPositions = [...loadedPositions].sort(
-          (a, b) => Number(getPositionNumber(a)) - Number(getPositionNumber(b))
-        );
+        const sortedPositions = [...loadedPositions].sort((a, b) => {
+          const numberA = Number(getPositionNumber(a));
+          const numberB = Number(getPositionNumber(b));
+
+          if (Number.isNaN(numberA) || Number.isNaN(numberB)) return 0;
+          return numberA - numberB;
+        });
 
         setMembers(loadedMembers);
         setPositions(sortedPositions);
@@ -399,11 +412,11 @@ function PlanningPage() {
       return "manual";
     }
 
-    if (formData.planningMode === "manual_only") {
+    if (isManualOnly) {
       return "manual";
     }
 
-    if (formData.planningMode === "external_only") {
+    if (isExternalOnly) {
       return formData.provider === "none" ? "google" : formData.provider;
     }
 
@@ -415,7 +428,7 @@ function PlanningPage() {
       return "none";
     }
 
-    if (formData.planningMode === "manual_only") {
+    if (isManualOnly) {
       return "none";
     }
 
@@ -521,23 +534,18 @@ function PlanningPage() {
       return;
     }
 
+    if (name === "source") {
+      setFormData((prev) => ({
+        ...prev,
+        source: value,
+      }));
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
-  };
-
-  const handleMemberSummaryChange = (e) => {
-    const memberId = e.target.value;
-
-    setSelectedMemberId(memberId);
-
-    setFormData((prev) => ({
-      ...prev,
-      memberId,
-    }));
-
-    refreshRules(memberId);
   };
 
   const handleSaveSettings = async () => {
@@ -720,9 +728,6 @@ function PlanningPage() {
       return;
     }
 
-    const finalSource = getFinalSource();
-    const finalProvider = getFinalProvider();
-
     const selectedPosition = positions.find(
       (position) => position.id === formData.positionId
     );
@@ -739,10 +744,9 @@ function PlanningPage() {
         planningMode: isSelectedMemberParent
           ? formData.planningMode
           : "manual_only",
-        provider: finalProvider,
-        source: finalSource,
-        externalEventId:
-          finalSource !== "manual" ? `${finalSource}_${Date.now()}` : null,
+        provider: "none",
+        source: "manual",
+        externalEventId: null,
       });
 
       setMessage("Routine ajoutée au planning");
@@ -839,10 +843,6 @@ function PlanningPage() {
               grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             }
 
-            .bottom-grid {
-              grid-template-columns: 1fr !important;
-            }
-
             .planning-hero-content {
               grid-template-columns: 1fr !important;
             }
@@ -851,6 +851,10 @@ function PlanningPage() {
               text-align: left !important;
               padding-right: 0 !important;
             }
+
+            .form-layout {
+              grid-template-columns: 1fr !important;
+            }
           }
 
           @media (max-width: 900px) {
@@ -858,7 +862,7 @@ function PlanningPage() {
               grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             }
 
-            .mode-grid {
+            .control-grid {
               grid-template-columns: 1fr !important;
             }
           }
@@ -903,27 +907,44 @@ function PlanningPage() {
 
               <p style={styles.subtitle}>
                 {familyName
-                  ? `Famille ${familyName} · organisez les routines de chaque membre`
-                  : "Organisez les routines de chaque membre"}
+                  ? `Famille ${familyName} · gérez les routines simplement`
+                  : "Gérez les routines simplement"}
               </p>
             </div>
           </div>
         </section>
 
-        {isSelectedMemberParent && (
-          <section className="planning-card" style={styles.modePanel}>
-            <div style={styles.sectionHeader}>
-              <div>
-                <p style={styles.sectionKicker}>Calendrier parent</p>
-                <h2 style={styles.sectionTitle}>Source du planning</h2>
-              </div>
-
-              <span style={styles.memberPill}>
-                {selectedMember?.name || "Parent"}
-              </span>
+        <section className="planning-card" style={styles.controlPanel}>
+          <div style={styles.sectionHeader}>
+            <div>
+              <p style={styles.sectionKicker}>Configuration</p>
+              <h2 style={styles.sectionTitle}>Source du planning</h2>
             </div>
 
-            <div className="mode-grid" style={styles.modeGrid}>
+            <span style={styles.memberPill}>
+              {selectedMember?.name || "Aucun membre"}
+            </span>
+          </div>
+
+          <div className="control-grid" style={styles.controlGrid}>
+            <label style={styles.label}>
+              Membre
+              <select
+                name="memberId"
+                value={formData.memberId}
+                onChange={handleChange}
+                style={styles.input}
+              >
+                <option value="">Choisir un membre</option>
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name} {member.role ? `(${member.role})` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {isSelectedMemberParent && (
               <label style={styles.label}>
                 Mode de planification
                 <select
@@ -939,158 +960,131 @@ function PlanningPage() {
                   ))}
                 </select>
               </label>
+            )}
 
-              {formData.planningMode !== "manual_only" && (
-                <label style={styles.label}>
-                  Calendrier externe
-                  <select
-                    name="provider"
-                    value={formData.provider}
-                    onChange={handleChange}
-                    style={styles.input}
-                  >
-                    <option value="google">Google Calendar</option>
-                    <option value="outlook">Outlook</option>
-                  </select>
-                </label>
-              )}
+            {showExternalProvider && (
+              <label style={styles.label}>
+                Calendrier externe
+                <select
+                  name="provider"
+                  value={formData.provider}
+                  onChange={handleChange}
+                  style={styles.input}
+                >
+                  <option value="google">Google Calendar</option>
+                  <option value="outlook">Outlook</option>
+                </select>
+              </label>
+            )}
 
-              {formData.planningMode === "hybrid" && (
-                <label style={styles.label}>
-                  Source de cette règle
-                  <select
-                    name="source"
-                    value={formData.source}
-                    onChange={handleChange}
-                    style={styles.input}
-                  >
-                    <option value="manual">Manuel</option>
-                    <option value="google">Google Calendar</option>
-                    <option value="outlook">Outlook</option>
-                  </select>
-                </label>
-              )}
-            </div>
-
-            <p style={styles.helperText}>{selectedPlanningMode?.description}</p>
-
-            <p style={styles.warningText}>
-              En cas de conflit, la règle manuelle reste prioritaire. Les
-              événements Google ou Outlook sont marqués comme conflit à vérifier.
-            </p>
-
-            <div style={styles.calendarActions}>
-              <button
-                type="button"
-                onClick={handleSaveSettings}
-                className="planning-button"
-                style={styles.secondaryButton}
-              >
-                Enregistrer le mode
-              </button>
-
-              {formData.planningMode !== "manual_only" && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => handleConnectCalendar(getFinalProvider())}
-                    className="planning-button"
-                    style={styles.secondaryButton}
-                  >
-                    Connecter {sourceLabels[getFinalProvider()]}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleImportCalendar}
-                    className="planning-button"
-                    style={{
-                      ...styles.secondaryButton,
-                      opacity: isSelectedProviderConnected() ? 1 : 0.55,
-                      cursor: isSelectedProviderConnected()
-                        ? "pointer"
-                        : "not-allowed",
-                    }}
-                    disabled={!isSelectedProviderConnected()}
-                  >
-                    Synchroniser les événements
-                  </button>
-                </>
-              )}
-            </div>
-
-            {formData.planningMode !== "manual_only" && (
-              <div style={styles.connectionBox}>
-                <p style={styles.connectionLine}>
-                  <strong>Google Calendar :</strong>{" "}
-                  {calendarConnections.google?.connected
-                    ? `connecté (${
-                        calendarConnections.google.accountEmail ||
-                        "compte Google"
-                      })`
-                    : "non connecté"}
-                </p>
-
-                <p style={styles.connectionLine}>
-                  <strong>Outlook :</strong>{" "}
-                  {calendarConnections.outlook?.connected
-                    ? `connecté (${
-                        calendarConnections.outlook.accountEmail ||
-                        "compte Outlook"
-                      })`
-                    : "non connecté"}
-                </p>
+            {!isSelectedMemberParent && (
+              <div style={styles.infoBox}>
+                Google Calendar et Outlook sont réservés aux parents. Ce membre
+                utilise uniquement le planning manuel.
               </div>
             )}
-          </section>
-        )}
-
-        {selectedMemberId && !isSelectedMemberParent && (
-          <section className="planning-card" style={styles.modePanel}>
-            <div style={styles.sectionHeader}>
-              <div>
-                <p style={styles.sectionKicker}>Planning enfant</p>
-                <h2 style={styles.sectionTitle}>Planning manuel</h2>
-              </div>
-            </div>
-
-            <p style={styles.helperText}>
-              Les calendriers Google Calendar et Outlook sont réservés aux
-              parents. Pour un enfant, le planning est ajouté manuellement par le
-              parent.
-            </p>
-          </section>
-        )}
-
-        <section className="planning-card" style={styles.summaryPanel}>
-          <div style={styles.summaryHeader}>
-            <div>
-              <p style={styles.sectionKicker}>Vue d’ensemble</p>
-              <h2 style={styles.sectionTitle}>
-                {selectedMember?.name
-                  ? `Planning de ${selectedMember.name}`
-                  : "Planning du membre"}
-              </h2>
-            </div>
-
-            <select
-              value={selectedMemberId}
-              onChange={handleMemberSummaryChange}
-              style={styles.memberSelect}
-            >
-              <option value="">Choisir un membre</option>
-              {members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name} {member.role ? `(${member.role})` : ""}
-                </option>
-              ))}
-            </select>
           </div>
 
+          {isSelectedMemberParent && (
+            <>
+              <p style={styles.helperText}>
+                {selectedPlanningMode?.description}
+              </p>
+
+              {showExternalProvider && (
+                <p style={styles.warningText}>
+                  En cas de conflit, la règle manuelle reste prioritaire. Les
+                  événements Google ou Outlook sont marqués comme conflit à
+                  vérifier.
+                </p>
+              )}
+
+              <div style={styles.calendarActions}>
+                <button
+                  type="button"
+                  onClick={handleSaveSettings}
+                  className="planning-button"
+                  style={styles.secondaryButton}
+                >
+                  Enregistrer le mode
+                </button>
+
+                {showExternalProvider && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleConnectCalendar(getFinalProvider())}
+                      className="planning-button"
+                      style={styles.secondaryButton}
+                    >
+                      Connecter {sourceLabels[getFinalProvider()]}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleImportCalendar}
+                      className="planning-button"
+                      style={{
+                        ...styles.primarySmallButton,
+                        opacity: isSelectedProviderConnected() ? 1 : 0.55,
+                        cursor: isSelectedProviderConnected()
+                          ? "pointer"
+                          : "not-allowed",
+                      }}
+                      disabled={!isSelectedProviderConnected()}
+                    >
+                      Synchroniser les événements
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {showExternalProvider && (
+                <div style={styles.externalStatusBox}>
+                  <div>
+                    <strong>{sourceLabels[getFinalProvider()]}</strong>
+                    <p style={styles.statusText}>
+                      {isSelectedProviderConnected()
+                        ? `Connecté ${
+                            calendarConnections[getFinalProvider()]
+                              ?.accountEmail
+                              ? `(${
+                                  calendarConnections[getFinalProvider()]
+                                    ?.accountEmail
+                                })`
+                              : ""
+                          }`
+                        : "Non connecté"}
+                    </p>
+                  </div>
+
+                  <span
+                    style={{
+                      ...styles.statusPill,
+                      backgroundColor: isSelectedProviderConnected()
+                        ? "#EEF5EF"
+                        : "#FFF1EF",
+                      color: isSelectedProviderConnected()
+                        ? "#4F7456"
+                        : "#9A5C51",
+                      borderColor: isSelectedProviderConnected()
+                        ? "#C7DDCB"
+                        : "#ECC7C1",
+                    }}
+                  >
+                    {isSelectedProviderConnected() ? "Actif" : "À connecter"}
+                  </span>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+
+        <section className="planning-card" style={styles.summaryPanel}>
           <div className="summary-grid" style={styles.summaryGrid}>
             <div style={styles.summaryBox}>
               <span style={styles.summaryValue}>{rules.length}</span>
-              <span style={styles.summaryLabel}>routine(s)</span>
+              <span style={styles.summaryLabel}>événement(s)</span>
             </div>
 
             <div style={styles.summaryBox}>
@@ -1105,11 +1099,11 @@ function PlanningPage() {
               <span style={styles.summaryLabel}>conflit(s)</span>
             </div>
 
-            <div style={styles.nextRoutineBox}>
-              <span style={styles.nextRoutineLabel}>Mode</span>
-              <span style={styles.nextRoutineText}>
+            <div style={styles.summaryBox}>
+              <span style={styles.summaryValueSmall}>
                 {displayedPlanningModeLabel}
               </span>
+              <span style={styles.summaryLabel}>mode actuel</span>
             </div>
           </div>
 
@@ -1222,8 +1216,7 @@ function PlanningPage() {
                               </p>
 
                               <p style={styles.rulePosition}>
-                                Position horloge :{" "}
-                                {rule.position_label || "Non définie"}
+                                Horloge : {rule.position_label || "Non définie"}
                               </p>
 
                               <div style={styles.badgeRow}>
@@ -1248,15 +1241,6 @@ function PlanningPage() {
                                   Garder celui-ci
                                 </button>
                               )}
-
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteRule(rule)}
-                                className="planning-button"
-                                style={styles.deleteSmallButton}
-                              >
-                                Supprimer
-                              </button>
                             </div>
                           );
                         })
@@ -1276,126 +1260,90 @@ function PlanningPage() {
           )}
         </section>
 
-        <section className="bottom-grid" style={styles.bottomGrid}>
-          <div className="planning-card" style={styles.formPanel}>
+        {showManualForm && (
+          <section className="planning-card" style={styles.formPanel}>
             <div style={styles.sectionHeader}>
               <div>
                 <p style={styles.sectionKicker}>Nouvelle routine</p>
-                <h2 style={styles.sectionTitle}>Planifier une présence</h2>
+                <h2 style={styles.sectionTitle}>Ajouter manuellement</h2>
               </div>
             </div>
 
             <p style={styles.formIntro}>
-              Choisissez un membre, une date et un lieu. Where O’Clock placera
-              automatiquement la routine au bon jour de la semaine.
+              Choisissez une date, une heure et une position sur l’horloge. Le
+              titre de l’événement peut être différent de la position.
             </p>
 
-            <form onSubmit={handleSubmit} style={styles.form}>
-              <label style={styles.label}>
-                Membre
-                <select
-                  name="memberId"
-                  value={formData.memberId}
-                  onChange={handleChange}
-                  style={styles.input}
-                >
-                  <option value="">Choisir un membre</option>
-                  {members.map((member) => (
-                    <option key={member.id} value={member.id}>
-                      {member.name} {member.role ? `(${member.role})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={styles.label}>
-                Date de référence
-                <input
-                  type="date"
-                  name="referenceDate"
-                  value={formData.referenceDate}
-                  onChange={handleChange}
-                  style={styles.input}
-                />
-              </label>
-
-              <label style={styles.label}>
-                Jour détecté
-                <input
-                  type="text"
-                  value={getDisplayedDay()}
-                  readOnly
-                  placeholder="Choisi automatiquement"
-                  style={{
-                    ...styles.input,
-                    backgroundColor: "#FDF6EC",
-                    color: "#8B6A4A",
-                  }}
-                />
-              </label>
-
-              <div className="time-grid" style={styles.timeGrid}>
+            <form onSubmit={handleSubmit}>
+              <div className="form-layout" style={styles.formLayout}>
                 <label style={styles.label}>
-                  Début
+                  Date de référence
                   <input
-                    type="time"
-                    name="startTime"
-                    value={formData.startTime}
+                    type="date"
+                    name="referenceDate"
+                    value={formData.referenceDate}
                     onChange={handleChange}
                     style={styles.input}
                   />
                 </label>
 
                 <label style={styles.label}>
-                  Fin
+                  Jour détecté
                   <input
-                    type="time"
-                    name="endTime"
-                    value={formData.endTime}
-                    onChange={handleChange}
-                    style={styles.input}
+                    type="text"
+                    value={getDisplayedDay()}
+                    readOnly
+                    placeholder="Choisi automatiquement"
+                    style={{
+                      ...styles.input,
+                      backgroundColor: "#FDF6EC",
+                      color: "#8B6A4A",
+                    }}
                   />
                 </label>
-              </div>
 
-              <label style={styles.label}>
-                Position horloge
-                <select
-                  name="positionId"
-                  value={formData.positionId}
-                  onChange={handleChange}
-                  style={styles.input}
-                >
-                  <option value="">Choisir une position</option>
-                  {positions.map((position) => (
-                    <option key={position.id} value={position.id}>
-                      P{getPositionNumber(position)} -{" "}
-                      {getPositionLabel(position)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <div className="time-grid" style={styles.timeGrid}>
+                  <label style={styles.label}>
+                    Début
+                    <input
+                      type="time"
+                      name="startTime"
+                      value={formData.startTime}
+                      onChange={handleChange}
+                      style={styles.input}
+                    />
+                  </label>
 
-              <p style={styles.helperText}>
-                Cette position correspond à l’emplacement de l’aiguille sur
-                l’horloge. Le titre de l’événement peut être différent.
-              </p>
+                  <label style={styles.label}>
+                    Fin
+                    <input
+                      type="time"
+                      name="endTime"
+                      value={formData.endTime}
+                      onChange={handleChange}
+                      style={styles.input}
+                    />
+                  </label>
+                </div>
 
-              <label style={styles.label}>
-                Titre de l’événement
-                <input
-                  type="text"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleChange}
-                  placeholder="Exemple : Réunion, École, Sport..."
-                  style={styles.input}
-                />
-              </label>
+                <label style={styles.label}>
+                  Position horloge
+                  <select
+                    name="positionId"
+                    value={formData.positionId}
+                    onChange={handleChange}
+                    style={styles.input}
+                  >
+                    <option value="">Choisir une position</option>
+                    {positions.map((position) => (
+                      <option key={position.id} value={position.id}>
+                        P{getPositionNumber(position)} -{" "}
+                        {getPositionLabel(position)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-              <div style={styles.currentSourceBox}>
-                Source utilisée :{" "}
-                <strong>{sourceLabels[getFinalSource()]}</strong>
               </div>
 
               <button
@@ -1406,105 +1354,103 @@ function PlanningPage() {
                 Ajouter au planning
               </button>
             </form>
+          </section>
+        )}
+
+        <section className="planning-card" style={styles.rulesPanel}>
+          <div style={styles.sectionHeader}>
+            <div>
+              <p style={styles.sectionKicker}>Détails</p>
+              <h2 style={styles.sectionTitle}>Événements enregistrés</h2>
+            </div>
           </div>
 
-          <div className="planning-card" style={styles.rulesPanel}>
-            <div style={styles.sectionHeader}>
-              <div>
-                <p style={styles.sectionKicker}>Détails</p>
-                <h2 style={styles.sectionTitle}>Routines enregistrées</h2>
-              </div>
-            </div>
-
-            {!selectedMemberId ? (
+          {!selectedMemberId ? (
+            <p style={styles.emptyText}>
+              Sélectionnez un membre pour voir ses événements.
+            </p>
+          ) : rules.length === 0 ? (
+            <div style={styles.emptySummary}>
+              <p style={styles.emptyTitle}>Aucun événement</p>
               <p style={styles.emptyText}>
-                Sélectionnez un membre pour voir ses routines.
+                Les événements Google, Outlook ou les routines manuelles
+                apparaîtront ici.
               </p>
-            ) : rules.length === 0 ? (
-              <div style={styles.emptySummary}>
-                <p style={styles.emptyTitle}>Aucune routine</p>
-                <p style={styles.emptyText}>
-                  Le planning détaillé apparaîtra ici après l’ajout d’une
-                  première routine.
-                </p>
-              </div>
-            ) : (
-              <div style={styles.routinesList}>
-                {rules.map((rule) => {
-                  const theme = getPositionTheme(rule.position_label);
+            </div>
+          ) : (
+            <div style={styles.routinesList}>
+              {rules.map((rule) => {
+                const theme = getPositionTheme(rule.position_label);
 
-                  return (
-                    <div
-                      key={rule.id}
-                      className="routine-row routine-row-layout"
-                      style={{
-                        ...styles.routineRow,
-                        borderColor:
-                          rule.conflict_status === "conflict"
-                            ? "#D88C35"
-                            : "#E6D6BF",
-                      }}
-                    >
-                      <div style={styles.routineDay}>
-                        {getDayLabel(rule.day_of_week)}
-                      </div>
+                return (
+                  <div
+                    key={rule.id}
+                    className="routine-row routine-row-layout"
+                    style={{
+                      ...styles.routineRow,
+                      borderColor:
+                        rule.conflict_status === "conflict"
+                          ? "#D88C35"
+                          : "#E6D6BF",
+                    }}
+                  >
+                    <div style={styles.routineDay}>
+                      {getDayLabel(rule.day_of_week)}
+                    </div>
 
-                      <div style={styles.routineMain}>
-                        <strong>
-                          {formatTime(rule.start_time)} →{" "}
-                          {formatTime(rule.end_time)}
-                        </strong>
+                    <div style={styles.routineMain}>
+                      <strong>
+                        {formatTime(rule.start_time)} →{" "}
+                        {formatTime(rule.end_time)}
+                      </strong>
 
-                        <span style={styles.routineTitle}>
-                          {rule.title || "Événement"}
-                        </span>
+                      <span style={styles.routineTitle}>
+                        {rule.title || "Événement"}
+                      </span>
 
-                        <span
-                          style={{
-                            ...styles.positionBadge,
-                            backgroundColor: theme.backgroundColor,
-                            borderColor: theme.borderColor,
-                            color: theme.color,
-                          }}
-                        >
-                          {rule.position_label}
-                        </span>
+                      <span
+                        style={{
+                          ...styles.positionBadge,
+                          backgroundColor: theme.backgroundColor,
+                          borderColor: theme.borderColor,
+                          color: theme.color,
+                        }}
+                      >
+                        {rule.position_label}
+                      </span>
 
-                        <span style={styles.routineMeta}>
-                          {sourceLabels[rule.source] || "Manuel"} ·{" "}
-                          {rule.conflict_status === "conflict"
-                            ? "Conflit"
-                            : "OK"}
-                        </span>
-                      </div>
+                      <span style={styles.routineMeta}>
+                        {sourceLabels[rule.source] || "Manuel"} ·{" "}
+                        {rule.conflict_status === "conflict" ? "Conflit" : "OK"}
+                      </span>
+                    </div>
 
-                      <div style={styles.actionColumn}>
-                        {rule.conflict_status === "conflict" && (
-                          <button
-                            type="button"
-                            onClick={() => handleKeepRule(rule)}
-                            className="planning-button"
-                            style={styles.keepButton}
-                          >
-                            Garder
-                          </button>
-                        )}
-
+                    <div style={styles.actionColumn}>
+                      {rule.conflict_status === "conflict" && (
                         <button
                           type="button"
-                          onClick={() => handleDeleteRule(rule)}
+                          onClick={() => handleKeepRule(rule)}
                           className="planning-button"
-                          style={styles.deleteButton}
+                          style={styles.keepButton}
                         >
-                          Supprimer
+                          Garder
                         </button>
-                      </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRule(rule)}
+                        className="planning-button"
+                        style={styles.deleteButton}
+                      >
+                        Supprimer
+                      </button>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
       </main>
     </div>
@@ -1521,7 +1467,7 @@ const styles = {
   },
 
   container: {
-    maxWidth: "1220px",
+    maxWidth: "1180px",
     margin: "0 auto",
     position: "relative",
     zIndex: 1,
@@ -1529,12 +1475,12 @@ const styles = {
 
   hero: {
     background:
-      "linear-gradient(135deg, rgba(255,255,255,0.92), rgba(250,241,226,0.88))",
+      "linear-gradient(135deg, rgba(255,255,255,0.94), rgba(250,241,226,0.9))",
     border: "1px solid #E6D6BF",
-    borderRadius: "32px",
-    padding: "24px 28px",
-    boxShadow: "0 24px 60px rgba(125, 107, 93, 0.12)",
-    marginBottom: "24px",
+    borderRadius: "28px",
+    padding: "22px 26px",
+    boxShadow: "0 22px 50px rgba(125, 107, 93, 0.12)",
+    marginBottom: "20px",
     backdropFilter: "blur(6px)",
   },
 
@@ -1551,7 +1497,7 @@ const styles = {
   },
 
   title: {
-    fontSize: "40px",
+    fontSize: "38px",
     color: "#6E5A4A",
     margin: 0,
     fontWeight: "900",
@@ -1560,10 +1506,10 @@ const styles = {
 
   subtitle: {
     color: "#A68A64",
-    fontSize: "15px",
-    letterSpacing: "1px",
+    fontSize: "14px",
+    letterSpacing: "0.8px",
     margin: "8px 0 0",
-    fontWeight: "600",
+    fontWeight: "700",
   },
 
   backBtn: {
@@ -1577,20 +1523,21 @@ const styles = {
     boxShadow: "0 10px 22px rgba(125, 107, 93, 0.12)",
   },
 
-  modePanel: {
-    backgroundColor: "rgba(255,255,255,0.9)",
+  controlPanel: {
+    backgroundColor: "rgba(255,255,255,0.93)",
     border: "1px solid #E6D6BF",
-    borderRadius: "28px",
-    padding: "26px",
-    boxShadow: "0 20px 48px rgba(125, 107, 93, 0.1)",
+    borderRadius: "26px",
+    padding: "24px",
+    boxShadow: "0 18px 42px rgba(125, 107, 93, 0.1)",
     backdropFilter: "blur(6px)",
-    marginBottom: "24px",
+    marginBottom: "20px",
   },
 
-  modeGrid: {
+  controlGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     gap: "16px",
+    alignItems: "end",
   },
 
   calendarActions: {
@@ -1600,37 +1547,43 @@ const styles = {
     marginTop: "16px",
   },
 
-  connectionBox: {
+  externalStatusBox: {
     marginTop: "16px",
     border: "1px solid #E6D6BF",
     borderRadius: "18px",
-    padding: "14px",
+    padding: "14px 16px",
     backgroundColor: "#FFFCF7",
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "16px",
+    alignItems: "center",
   },
 
-  connectionLine: {
-    margin: "6px 0",
-    color: "#7D6B5D",
+  statusText: {
+    margin: "4px 0 0",
+    color: "#8B6A4A",
+    fontSize: "13px",
     fontWeight: "700",
+  },
+
+  statusPill: {
+    border: "1px solid",
+    borderRadius: "999px",
+    padding: "7px 11px",
+    fontSize: "12px",
+    fontWeight: "900",
+    whiteSpace: "nowrap",
   },
 
   summaryPanel: {
     background:
-      "linear-gradient(135deg, rgba(255,248,234,0.94), rgba(255,255,255,0.86))",
+      "linear-gradient(135deg, rgba(255,248,234,0.96), rgba(255,255,255,0.9))",
     border: "1px solid #D2B48C",
-    borderRadius: "28px",
-    padding: "26px",
-    boxShadow: "0 20px 48px rgba(125, 107, 93, 0.1)",
+    borderRadius: "26px",
+    padding: "22px",
+    boxShadow: "0 18px 42px rgba(125, 107, 93, 0.1)",
     backdropFilter: "blur(6px)",
-    marginBottom: "24px",
-  },
-
-  summaryHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: "18px",
-    marginBottom: "18px",
+    marginBottom: "20px",
   },
 
   summaryGrid: {
@@ -1640,10 +1593,10 @@ const styles = {
   },
 
   summaryBox: {
-    backgroundColor: "rgba(255,255,255,0.78)",
+    backgroundColor: "rgba(255,255,255,0.8)",
     border: "1px solid #E6D6BF",
-    borderRadius: "22px",
-    padding: "18px",
+    borderRadius: "20px",
+    padding: "16px",
     display: "flex",
     flexDirection: "column",
     gap: "4px",
@@ -1651,33 +1604,30 @@ const styles = {
 
   summaryValue: {
     color: "#6E5A4A",
-    fontSize: "30px",
+    fontSize: "28px",
     fontWeight: "900",
     lineHeight: "1",
   },
 
-  summaryLabel: {
-    color: "#8B6A4A",
-    fontSize: "13px",
-    fontWeight: "800",
+  summaryValueSmall: {
+    color: "#6E5A4A",
+    fontSize: "18px",
+    fontWeight: "900",
+    lineHeight: "1.2",
   },
 
-  nextRoutineBox: {
-    backgroundColor: "#FFFCF7",
-    border: "1px solid #E6D6BF",
-    borderRadius: "22px",
-    padding: "18px",
-    display: "flex",
-    flexDirection: "column",
-    gap: "6px",
+  summaryLabel: {
+    color: "#8B6A4A",
+    fontSize: "12px",
+    fontWeight: "800",
   },
 
   nextRoutineBoxFull: {
     marginTop: "14px",
     backgroundColor: "#FFFCF7",
     border: "1px solid #E6D6BF",
-    borderRadius: "22px",
-    padding: "18px",
+    borderRadius: "20px",
+    padding: "15px",
     display: "flex",
     flexDirection: "column",
     gap: "6px",
@@ -1698,49 +1648,32 @@ const styles = {
     lineHeight: "1.4",
   },
 
-  memberSelect: {
-    minWidth: "230px",
-    padding: "12px 14px",
-    borderRadius: "16px",
-    border: "1px solid #D2B48C",
-    backgroundColor: "#FFFFFF",
-    color: "#7D6B5D",
-    fontWeight: "900",
-    outline: "none",
-  },
-
   calendarPanel: {
-    backgroundColor: "rgba(255,255,255,0.9)",
+    backgroundColor: "rgba(255,255,255,0.93)",
     border: "1px solid #E6D6BF",
-    borderRadius: "28px",
-    padding: "26px",
-    boxShadow: "0 20px 48px rgba(125, 107, 93, 0.1)",
+    borderRadius: "26px",
+    padding: "24px",
+    boxShadow: "0 18px 42px rgba(125, 107, 93, 0.1)",
     backdropFilter: "blur(6px)",
-    marginBottom: "24px",
-  },
-
-  bottomGrid: {
-    display: "grid",
-    gridTemplateColumns: "0.85fr 1.15fr",
-    gap: "24px",
-    alignItems: "start",
+    marginBottom: "20px",
   },
 
   formPanel: {
-    backgroundColor: "rgba(255,255,255,0.9)",
+    backgroundColor: "rgba(255,255,255,0.93)",
     border: "1px solid #E6D6BF",
-    borderRadius: "28px",
-    padding: "26px",
-    boxShadow: "0 20px 48px rgba(125, 107, 93, 0.1)",
+    borderRadius: "26px",
+    padding: "24px",
+    boxShadow: "0 18px 42px rgba(125, 107, 93, 0.1)",
     backdropFilter: "blur(6px)",
+    marginBottom: "20px",
   },
 
   rulesPanel: {
-    backgroundColor: "rgba(255,255,255,0.9)",
+    backgroundColor: "rgba(255,255,255,0.93)",
     border: "1px solid #E6D6BF",
-    borderRadius: "28px",
-    padding: "26px",
-    boxShadow: "0 20px 48px rgba(125, 107, 93, 0.1)",
+    borderRadius: "26px",
+    padding: "24px",
+    boxShadow: "0 18px 42px rgba(125, 107, 93, 0.1)",
     backdropFilter: "blur(6px)",
   },
 
@@ -1749,7 +1682,7 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: "16px",
-    marginBottom: "18px",
+    marginBottom: "16px",
   },
 
   sectionKicker: {
@@ -1764,8 +1697,18 @@ const styles = {
   sectionTitle: {
     margin: "4px 0 0",
     color: "#6E5A4A",
-    fontSize: "26px",
+    fontSize: "24px",
     fontWeight: "900",
+  },
+
+  memberPill: {
+    backgroundColor: "#F1DEC0",
+    color: "#80552D",
+    borderRadius: "999px",
+    padding: "8px 12px",
+    fontSize: "13px",
+    fontWeight: "900",
+    whiteSpace: "nowrap",
   },
 
   formIntro: {
@@ -1776,9 +1719,9 @@ const styles = {
     lineHeight: "1.6",
   },
 
-  form: {
-    display: "flex",
-    flexDirection: "column",
+  formLayout: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     gap: "14px",
   },
 
@@ -1804,7 +1747,7 @@ const styles = {
   },
 
   helperText: {
-    margin: "8px 0 0",
+    margin: "10px 0 0",
     color: "#8B6A4A",
     fontSize: "13px",
     fontWeight: "700",
@@ -1819,6 +1762,17 @@ const styles = {
     lineHeight: "1.5",
   },
 
+  infoBox: {
+    border: "1px solid #E6D6BF",
+    backgroundColor: "#FFFCF7",
+    color: "#7D6B5D",
+    borderRadius: "16px",
+    padding: "13px",
+    fontSize: "13px",
+    fontWeight: "800",
+    lineHeight: "1.5",
+  },
+
   timeGrid: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
@@ -1826,7 +1780,7 @@ const styles = {
   },
 
   primaryButton: {
-    marginTop: "4px",
+    marginTop: "18px",
     border: "none",
     backgroundColor: "#8DAA91",
     color: "#FFFFFF",
@@ -1837,6 +1791,17 @@ const styles = {
     boxShadow: "0 10px 22px rgba(141, 170, 145, 0.28)",
   },
 
+  primarySmallButton: {
+    border: "none",
+    backgroundColor: "#8DAA91",
+    color: "#FFFFFF",
+    padding: "11px 16px",
+    borderRadius: "14px",
+    fontWeight: "900",
+    cursor: "pointer",
+    boxShadow: "0 10px 22px rgba(141, 170, 145, 0.22)",
+  },
+
   secondaryButton: {
     border: "1px solid #D2B48C",
     backgroundColor: "#FFFFFF",
@@ -1845,26 +1810,6 @@ const styles = {
     borderRadius: "14px",
     fontWeight: "900",
     cursor: "pointer",
-  },
-
-  memberPill: {
-    backgroundColor: "#F1DEC0",
-    color: "#80552D",
-    borderRadius: "999px",
-    padding: "8px 12px",
-    fontSize: "13px",
-    fontWeight: "900",
-    whiteSpace: "nowrap",
-  },
-
-  currentSourceBox: {
-    border: "1px solid #E6D6BF",
-    borderRadius: "16px",
-    padding: "12px",
-    backgroundColor: "#FFFCF7",
-    color: "#7D6B5D",
-    fontSize: "14px",
-    fontWeight: "800",
   },
 
   calendarGrid: {
@@ -1989,19 +1934,6 @@ const styles = {
     borderRadius: "14px",
     fontWeight: "900",
     cursor: "pointer",
-  },
-
-  deleteSmallButton: {
-    display: "block",
-    marginTop: "8px",
-    padding: "6px 9px",
-    cursor: "pointer",
-    border: "1px solid #E6D6BF",
-    borderRadius: "12px",
-    backgroundColor: "#FFFFFF",
-    color: "#A15C4B",
-    fontSize: "12px",
-    fontWeight: "900",
   },
 
   emptyDayBox: {
