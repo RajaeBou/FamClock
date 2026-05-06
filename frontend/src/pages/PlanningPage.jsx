@@ -14,6 +14,31 @@ const dayOptions = [
 
 const dayOrder = [1, 2, 3, 4, 5, 6, 0];
 
+const planningModeOptions = [
+  {
+    value: "manual_only",
+    label: "Manuel uniquement",
+    description: "Le parent ajoute les règles lui-même dans WereO’clock.",
+  },
+  {
+    value: "external_only",
+    label: "Calendrier externe uniquement",
+    description: "Le planning vient de Google Calendar ou Outlook.",
+  },
+  {
+    value: "hybrid",
+    label: "Manuel + calendrier externe",
+    description:
+      "Le parent peut combiner le manuel avec Google Calendar ou Outlook.",
+  },
+];
+
+const sourceLabels = {
+  manual: "Manuel",
+  google: "Google Calendar",
+  outlook: "Outlook",
+};
+
 const getPositionNumber = (position) =>
   position?.positionNumber ?? position?.position_number ?? "-";
 
@@ -25,7 +50,7 @@ const formatTime = (time) => {
 };
 
 const getDayLabel = (dayValue) =>
-  dayOptions.find((day) => day.value === dayValue)?.label || dayValue;
+  dayOptions.find((day) => day.value === Number(dayValue))?.label || dayValue;
 
 const getPositionTheme = (label = "") => {
   const text = label.toLowerCase();
@@ -94,6 +119,13 @@ function PlanningPage() {
   const [members, setMembers] = useState([]);
   const [positions, setPositions] = useState([]);
   const [rules, setRules] = useState([]);
+  const [conflicts, setConflicts] = useState([]);
+
+  const [calendarConnections, setCalendarConnections] = useState({
+    google: { connected: false },
+    outlook: { connected: false },
+  });
+
   const [message, setMessage] = useState("");
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -105,12 +137,181 @@ function PlanningPage() {
     startTime: "",
     endTime: "",
     positionId: "",
+    title: "",
+    planningMode: "manual_only",
+    provider: "none",
+    source: "manual",
   });
 
   const selectedMember = useMemo(
     () => members.find((member) => member.id === selectedMemberId),
     [members, selectedMemberId]
   );
+
+  const isSelectedMemberParent = Boolean(
+    selectedMember?.role?.toLowerCase?.().includes("parent")
+  );
+
+  const selectedPlanningMode = planningModeOptions.find(
+    (mode) => mode.value === formData.planningMode
+  );
+
+  const displayedPlanningModeLabel = isSelectedMemberParent
+    ? selectedPlanningMode?.label
+    : "Manuel uniquement";
+
+  const clearMessageAfterDelay = () => {
+    setTimeout(() => setMessage(""), 3500);
+  };
+
+  const refreshCalendarStatus = async () => {
+    if (!familyId) return;
+
+    try {
+      const response = await api.get(`/calendar-auth/status/${familyId}`);
+
+      setCalendarConnections(
+        response.data.connections || {
+          google: { connected: false },
+          outlook: { connected: false },
+        }
+      );
+    } catch (error) {
+      console.warn("Statut calendrier non chargé :", error);
+    }
+  };
+
+  const refreshRules = async (memberId) => {
+    if (!memberId) {
+      setRules([]);
+      setConflicts([]);
+      return;
+    }
+
+    try {
+      const response = await api.get(`/schedule-rules/${memberId}`);
+      setRules(response.data.rules || []);
+
+      try {
+        const conflictResponse = await api.get(
+          `/schedule-rules/conflicts/${memberId}`
+        );
+        setConflicts(conflictResponse.data.conflicts || []);
+      } catch (conflictError) {
+        console.warn("Conflits non chargés :", conflictError);
+        setConflicts([]);
+      }
+    } catch (error) {
+      console.error(error);
+      setMessage("Erreur lors du chargement du planning");
+      clearMessageAfterDelay();
+    }
+  };
+
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      if (!familyId) {
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      try {
+        setLoading(true);
+
+        const [membersResponse, positionsResponse] = await Promise.all([
+          api.get(`/members/family/${familyId}`),
+          api.get(`/clock-positions/family/${familyId}`),
+        ]);
+
+        const loadedMembers =
+          membersResponse.data.data || membersResponse.data.members || [];
+
+        const loadedPositions =
+          positionsResponse.data.data || positionsResponse.data.positions || [];
+
+        const sortedPositions = [...loadedPositions].sort(
+          (a, b) => Number(getPositionNumber(a)) - Number(getPositionNumber(b))
+        );
+
+        setMembers(loadedMembers);
+        setPositions(sortedPositions);
+
+        if (loadedMembers.length > 0) {
+          const firstMember = loadedMembers[0];
+
+          setSelectedMemberId(firstMember.id);
+
+          setFormData((prev) => ({
+            ...prev,
+            memberId: firstMember.id,
+          }));
+
+          await refreshRules(firstMember.id);
+        }
+
+        if (sortedPositions.length > 0) {
+          setFormData((prev) => ({
+            ...prev,
+            positionId: sortedPositions[0].id,
+          }));
+        }
+
+        try {
+          const settingsResponse = await api.get(
+            `/schedule-rules/settings/${familyId}`
+          );
+
+          const settings = settingsResponse.data.settings;
+
+          if (settings) {
+            setFormData((prev) => ({
+              ...prev,
+              planningMode: settings.planning_mode || "manual_only",
+              provider: settings.provider || "none",
+              source:
+                settings.planning_mode === "external_only"
+                  ? settings.provider || "google"
+                  : "manual",
+            }));
+          }
+        } catch (settingsError) {
+          console.warn("Paramètres planning non chargés :", settingsError);
+        }
+
+        await refreshCalendarStatus();
+
+        const params = new URLSearchParams(window.location.search);
+        const connected = params.get("connected");
+        const provider = params.get("provider");
+
+        if (connected === "true" && provider) {
+          setMessage(
+            `${sourceLabels[provider] || provider} connecté avec succès`
+          );
+          window.history.replaceState({}, "", window.location.pathname);
+          clearMessageAfterDelay();
+        }
+
+        if (connected === "false" && provider) {
+          setMessage(
+            `Erreur lors de la connexion ${
+              sourceLabels[provider] || provider
+            }`
+          );
+          window.history.replaceState({}, "", window.location.pathname);
+          clearMessageAfterDelay();
+        }
+      } catch (error) {
+        console.error(error);
+        setMessage("Erreur lors du chargement des données");
+        clearMessageAfterDelay();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInitialData();
+  }, [familyId, navigate]);
 
   const groupedRules = useMemo(() => {
     const grouped = {
@@ -173,8 +374,8 @@ function PlanningPage() {
     if (rules.length === 0) return null;
 
     const sorted = [...rules].sort((a, b) => {
-      const dayA = dayOrder.indexOf(a.day_of_week);
-      const dayB = dayOrder.indexOf(b.day_of_week);
+      const dayA = dayOrder.indexOf(Number(a.day_of_week));
+      const dayB = dayOrder.indexOf(Number(b.day_of_week));
 
       if (dayA !== dayB) return dayA - dayB;
 
@@ -184,79 +385,52 @@ function PlanningPage() {
     return sorted[0];
   }, [rules]);
 
-  const clearMessageAfterDelay = () => {
-    setTimeout(() => setMessage(""), 3000);
+  const getDisplayedDay = () => {
+    if (formData.dayOfWeek === "") return "";
+
+    return (
+      dayOptions.find((day) => day.value === Number(formData.dayOfWeek))
+        ?.label || ""
+    );
   };
 
-  const fetchRules = async (memberId) => {
-    if (!memberId) {
-      setRules([]);
-      return;
+  const getFinalSource = () => {
+    if (!isSelectedMemberParent) {
+      return "manual";
     }
 
-    try {
-      const response = await api.get(`/schedule-rules/${memberId}`);
-      setRules(response.data.rules || []);
-    } catch (error) {
-      console.error(error);
-      setMessage("Erreur lors du chargement du planning");
-      clearMessageAfterDelay();
+    if (formData.planningMode === "manual_only") {
+      return "manual";
     }
+
+    if (formData.planningMode === "external_only") {
+      return formData.provider === "none" ? "google" : formData.provider;
+    }
+
+    return formData.source || "manual";
   };
 
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        setLoading(true);
-
-        const [membersResponse, positionsResponse] = await Promise.all([
-          api.get(`/members/family/${familyId}`),
-          api.get(`/clock-positions/family/${familyId}`),
-        ]);
-
-        const loadedMembers = membersResponse.data.data || [];
-        const loadedPositions = positionsResponse.data.data || [];
-
-        setMembers(loadedMembers);
-
-        setPositions(
-          [...loadedPositions].sort(
-            (a, b) => getPositionNumber(a) - getPositionNumber(b)
-          )
-        );
-
-        if (loadedMembers.length > 0) {
-          setSelectedMemberId(loadedMembers[0].id);
-
-          setFormData((prev) => ({
-            ...prev,
-            memberId: loadedMembers[0].id,
-          }));
-
-          await fetchRules(loadedMembers[0].id);
-        }
-
-        if (loadedPositions.length > 0) {
-          setFormData((prev) => ({
-            ...prev,
-            positionId: loadedPositions[0].id,
-          }));
-        }
-      } catch (error) {
-        console.error(error);
-        setMessage("Erreur lors du chargement des données");
-        clearMessageAfterDelay();
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (familyId) {
-      fetchInitialData();
-    } else {
-      navigate("/login", { replace: true });
+  const getFinalProvider = () => {
+    if (!isSelectedMemberParent) {
+      return "none";
     }
-  }, [familyId, navigate]);
+
+    if (formData.planningMode === "manual_only") {
+      return "none";
+    }
+
+    return formData.provider === "none" ? "google" : formData.provider;
+  };
+
+  const isSelectedProviderConnected = () => {
+    const provider = getFinalProvider();
+
+    if (provider === "none") {
+      return false;
+    }
+
+    return Boolean(calendarConnections[provider]?.connected);
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -286,14 +460,64 @@ function PlanningPage() {
     }
 
     if (name === "memberId") {
+      const nextMember = members.find((member) => member.id === value);
+
+      const nextMemberIsParent = Boolean(
+        nextMember?.role?.toLowerCase?.().includes("parent")
+      );
+
       setSelectedMemberId(value);
 
       setFormData((prev) => ({
         ...prev,
         memberId: value,
+        planningMode: nextMemberIsParent ? prev.planningMode : "manual_only",
+        provider: nextMemberIsParent ? prev.provider : "none",
+        source: nextMemberIsParent ? prev.source : "manual",
       }));
 
-      fetchRules(value);
+      refreshRules(value);
+      return;
+    }
+
+    if (name === "planningMode") {
+      if (value === "manual_only") {
+        setFormData((prev) => ({
+          ...prev,
+          planningMode: value,
+          provider: "none",
+          source: "manual",
+        }));
+        return;
+      }
+
+      if (value === "external_only") {
+        setFormData((prev) => ({
+          ...prev,
+          planningMode: value,
+          provider: prev.provider === "none" ? "google" : prev.provider,
+          source: prev.provider === "none" ? "google" : prev.provider,
+        }));
+        return;
+      }
+
+      if (value === "hybrid") {
+        setFormData((prev) => ({
+          ...prev,
+          planningMode: value,
+          provider: prev.provider === "none" ? "google" : prev.provider,
+          source: "manual",
+        }));
+        return;
+      }
+    }
+
+    if (name === "provider") {
+      setFormData((prev) => ({
+        ...prev,
+        provider: value,
+        source: prev.planningMode === "external_only" ? value : prev.source,
+      }));
       return;
     }
 
@@ -313,7 +537,171 @@ function PlanningPage() {
       memberId,
     }));
 
-    fetchRules(memberId);
+    refreshRules(memberId);
+  };
+
+  const handleSaveSettings = async () => {
+    setMessage("");
+
+    if (!isSelectedMemberParent) {
+      setMessage(
+        "Les calendriers Google Calendar et Outlook sont réservés aux parents."
+      );
+      clearMessageAfterDelay();
+      return;
+    }
+
+    try {
+      await api.put(`/schedule-rules/settings/${familyId}`, {
+        planningMode: formData.planningMode,
+        provider: getFinalProvider(),
+        syncEnabled: formData.planningMode !== "manual_only",
+      });
+
+      setMessage("Mode de planification enregistré");
+      clearMessageAfterDelay();
+    } catch (error) {
+      console.error(error);
+
+      setMessage(
+        error.response?.data?.message ||
+          "Erreur lors de l’enregistrement du mode de planification"
+      );
+      clearMessageAfterDelay();
+    }
+  };
+
+  const handleConnectCalendar = (provider) => {
+    if (!isSelectedMemberParent) {
+      setMessage(
+        "Les calendriers Google Calendar et Outlook sont réservés aux parents."
+      );
+      clearMessageAfterDelay();
+      return;
+    }
+
+    const baseUrl = (api.defaults.baseURL || "http://localhost:3000/api").replace(
+      /\/$/,
+      ""
+    );
+
+    window.location.href = `${baseUrl}/calendar-auth/${provider}/connect?familyId=${familyId}`;
+  };
+
+  const handleImportCalendar = async () => {
+    setMessage("");
+
+    if (!isSelectedMemberParent) {
+      setMessage("L'import de calendrier est réservé aux parents.");
+      clearMessageAfterDelay();
+      return;
+    }
+
+    const provider = getFinalProvider();
+
+    if (provider === "none") {
+      setMessage("Choisis d'abord Google Calendar ou Outlook");
+      clearMessageAfterDelay();
+      return;
+    }
+
+    if (!formData.memberId || !formData.positionId) {
+      setMessage(
+        "Choisis un membre et une position horloge par défaut pour la synchronisation"
+      );
+      clearMessageAfterDelay();
+      return;
+    }
+
+    if (!calendarConnections[provider]?.connected) {
+      setMessage(`Connecte d'abord ${sourceLabels[provider]}`);
+      clearMessageAfterDelay();
+      return;
+    }
+
+    try {
+      const response = await api.post(`/calendar-auth/${provider}/import`, {
+        familyId,
+        memberId: formData.memberId,
+        positionId: formData.positionId,
+        days: 7,
+      });
+
+      setMessage(
+        `${sourceLabels[provider]} synchronisé : ${
+          response.data.imported || 0
+        } ajouté(s), ${response.data.updated || 0} mis à jour, ${
+          response.data.deleted || 0
+        } supprimé(s), ${response.data.conflicts || 0} conflit(s)`
+      );
+
+      await refreshRules(formData.memberId);
+      clearMessageAfterDelay();
+    } catch (error) {
+      console.error(error);
+
+      setMessage(
+        error.response?.data?.message ||
+          `Erreur lors de la synchronisation ${sourceLabels[provider]}`
+      );
+      clearMessageAfterDelay();
+    }
+  };
+
+  const handleDeleteRule = async (rule) => {
+    const confirmDelete = window.confirm(
+      `Voulez-vous supprimer cette routine ?\n\n${
+        rule.title || rule.position_label || "Événement"
+      }\n${formatTime(rule.start_time)} → ${formatTime(rule.end_time)}`
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      await api.delete(`/schedule-rules/${rule.id}`);
+
+      setMessage("Routine supprimée");
+
+      await refreshRules(selectedMemberId);
+      clearMessageAfterDelay();
+    } catch (error) {
+      console.error(error);
+      setMessage(
+        error.response?.data?.message ||
+          "Suppression impossible. Vérifiez que la route DELETE existe côté backend."
+      );
+      clearMessageAfterDelay();
+    }
+  };
+
+  const handleKeepRule = async (rule) => {
+    const confirmKeep = window.confirm(
+      `Garder cet événement et ignorer les événements en conflit ?\n\n${
+        rule.title || rule.position_label || "Événement"
+      }\n${formatTime(rule.start_time)} → ${formatTime(rule.end_time)}`
+    );
+
+    if (!confirmKeep) return;
+
+    try {
+      const response = await api.patch(`/schedule-rules/${rule.id}/keep`);
+
+      setMessage(
+        `${rule.title || "Événement"} conservé. ${
+          response.data.ignoredRules || 0
+        } événement(s) en conflit ignoré(s).`
+      );
+
+      await refreshRules(selectedMemberId);
+      clearMessageAfterDelay();
+    } catch (error) {
+      console.error(error);
+
+      setMessage(
+        error.response?.data?.message || "Erreur lors de la gestion du conflit"
+      );
+      clearMessageAfterDelay();
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -332,6 +720,13 @@ function PlanningPage() {
       return;
     }
 
+    const finalSource = getFinalSource();
+    const finalProvider = getFinalProvider();
+
+    const selectedPosition = positions.find(
+      (position) => position.id === formData.positionId
+    );
+
     try {
       await api.post("/schedule-rules", {
         familyId,
@@ -340,11 +735,19 @@ function PlanningPage() {
         startTime: formData.startTime,
         endTime: formData.endTime,
         positionId: formData.positionId,
+        title: formData.title || selectedPosition?.label || null,
+        planningMode: isSelectedMemberParent
+          ? formData.planningMode
+          : "manual_only",
+        provider: finalProvider,
+        source: finalSource,
+        externalEventId:
+          finalSource !== "manual" ? `${finalSource}_${Date.now()}` : null,
       });
 
       setMessage("Routine ajoutée au planning");
 
-      await fetchRules(formData.memberId);
+      await refreshRules(formData.memberId);
 
       setFormData((prev) => ({
         ...prev,
@@ -352,6 +755,7 @@ function PlanningPage() {
         dayOfWeek: "",
         startTime: "",
         endTime: "",
+        title: "",
         positionId: positions[0]?.id || "",
       }));
 
@@ -364,31 +768,6 @@ function PlanningPage() {
         error.response?.data?.message || "Erreur lors de l’ajout de la routine"
       );
 
-      clearMessageAfterDelay();
-    }
-  };
-
-  const handleDeleteRule = async (ruleId) => {
-    const confirmDelete = window.confirm(
-      "Voulez-vous supprimer cette routine du planning ?"
-    );
-
-    if (!confirmDelete) return;
-
-    try {
-      await api.delete(`/schedule-rules/${ruleId}`);
-
-      setMessage("Routine supprimée");
-
-      await fetchRules(selectedMemberId);
-
-      clearMessageAfterDelay();
-    } catch (error) {
-      console.error(error);
-      setMessage(
-        error.response?.data?.message ||
-          "Suppression impossible. Vérifiez que la route DELETE existe côté backend."
-      );
       clearMessageAfterDelay();
     }
   };
@@ -478,6 +857,10 @@ function PlanningPage() {
             .calendar-grid {
               grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             }
+
+            .mode-grid {
+              grid-template-columns: 1fr !important;
+            }
           }
 
           @media (max-width: 600px) {
@@ -527,6 +910,158 @@ function PlanningPage() {
           </div>
         </section>
 
+        {isSelectedMemberParent && (
+          <section className="planning-card" style={styles.modePanel}>
+            <div style={styles.sectionHeader}>
+              <div>
+                <p style={styles.sectionKicker}>Calendrier parent</p>
+                <h2 style={styles.sectionTitle}>Source du planning</h2>
+              </div>
+
+              <span style={styles.memberPill}>
+                {selectedMember?.name || "Parent"}
+              </span>
+            </div>
+
+            <div className="mode-grid" style={styles.modeGrid}>
+              <label style={styles.label}>
+                Mode de planification
+                <select
+                  name="planningMode"
+                  value={formData.planningMode}
+                  onChange={handleChange}
+                  style={styles.input}
+                >
+                  {planningModeOptions.map((mode) => (
+                    <option key={mode.value} value={mode.value}>
+                      {mode.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {formData.planningMode !== "manual_only" && (
+                <label style={styles.label}>
+                  Calendrier externe
+                  <select
+                    name="provider"
+                    value={formData.provider}
+                    onChange={handleChange}
+                    style={styles.input}
+                  >
+                    <option value="google">Google Calendar</option>
+                    <option value="outlook">Outlook</option>
+                  </select>
+                </label>
+              )}
+
+              {formData.planningMode === "hybrid" && (
+                <label style={styles.label}>
+                  Source de cette règle
+                  <select
+                    name="source"
+                    value={formData.source}
+                    onChange={handleChange}
+                    style={styles.input}
+                  >
+                    <option value="manual">Manuel</option>
+                    <option value="google">Google Calendar</option>
+                    <option value="outlook">Outlook</option>
+                  </select>
+                </label>
+              )}
+            </div>
+
+            <p style={styles.helperText}>{selectedPlanningMode?.description}</p>
+
+            <p style={styles.warningText}>
+              En cas de conflit, la règle manuelle reste prioritaire. Les
+              événements Google ou Outlook sont marqués comme conflit à vérifier.
+            </p>
+
+            <div style={styles.calendarActions}>
+              <button
+                type="button"
+                onClick={handleSaveSettings}
+                className="planning-button"
+                style={styles.secondaryButton}
+              >
+                Enregistrer le mode
+              </button>
+
+              {formData.planningMode !== "manual_only" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleConnectCalendar(getFinalProvider())}
+                    className="planning-button"
+                    style={styles.secondaryButton}
+                  >
+                    Connecter {sourceLabels[getFinalProvider()]}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleImportCalendar}
+                    className="planning-button"
+                    style={{
+                      ...styles.secondaryButton,
+                      opacity: isSelectedProviderConnected() ? 1 : 0.55,
+                      cursor: isSelectedProviderConnected()
+                        ? "pointer"
+                        : "not-allowed",
+                    }}
+                    disabled={!isSelectedProviderConnected()}
+                  >
+                    Synchroniser les événements
+                  </button>
+                </>
+              )}
+            </div>
+
+            {formData.planningMode !== "manual_only" && (
+              <div style={styles.connectionBox}>
+                <p style={styles.connectionLine}>
+                  <strong>Google Calendar :</strong>{" "}
+                  {calendarConnections.google?.connected
+                    ? `connecté (${
+                        calendarConnections.google.accountEmail ||
+                        "compte Google"
+                      })`
+                    : "non connecté"}
+                </p>
+
+                <p style={styles.connectionLine}>
+                  <strong>Outlook :</strong>{" "}
+                  {calendarConnections.outlook?.connected
+                    ? `connecté (${
+                        calendarConnections.outlook.accountEmail ||
+                        "compte Outlook"
+                      })`
+                    : "non connecté"}
+                </p>
+              </div>
+            )}
+          </section>
+        )}
+
+        {selectedMemberId && !isSelectedMemberParent && (
+          <section className="planning-card" style={styles.modePanel}>
+            <div style={styles.sectionHeader}>
+              <div>
+                <p style={styles.sectionKicker}>Planning enfant</p>
+                <h2 style={styles.sectionTitle}>Planning manuel</h2>
+              </div>
+            </div>
+
+            <p style={styles.helperText}>
+              Les calendriers Google Calendar et Outlook sont réservés aux
+              parents. Pour un enfant, le planning est ajouté manuellement par le
+              parent.
+            </p>
+          </section>
+        )}
+
         <section className="planning-card" style={styles.summaryPanel}>
           <div style={styles.summaryHeader}>
             <div>
@@ -546,7 +1081,7 @@ function PlanningPage() {
               <option value="">Choisir un membre</option>
               {members.map((member) => (
                 <option key={member.id} value={member.id}>
-                  {member.name}
+                  {member.name} {member.role ? `(${member.role})` : ""}
                 </option>
               ))}
             </select>
@@ -565,28 +1100,62 @@ function PlanningPage() {
 
             <div style={styles.summaryBox}>
               <span style={styles.summaryValue}>
-                {rules.length > 0 ? "Actif" : "Vide"}
+                {conflicts.length > 0 ? conflicts.length : "OK"}
               </span>
-              <span style={styles.summaryLabel}>statut</span>
+              <span style={styles.summaryLabel}>conflit(s)</span>
             </div>
 
             <div style={styles.nextRoutineBox}>
-              <span style={styles.nextRoutineLabel}>Prochaine routine</span>
-
-              {nextRoutine ? (
-                <span style={styles.nextRoutineText}>
-                  {getDayLabel(nextRoutine.day_of_week)} ·{" "}
-                  {formatTime(nextRoutine.start_time)} →{" "}
-                  {formatTime(nextRoutine.end_time)} ·{" "}
-                  {nextRoutine.position_label}
-                </span>
-              ) : (
-                <span style={styles.nextRoutineText}>
-                  Aucune routine enregistrée
-                </span>
-              )}
+              <span style={styles.nextRoutineLabel}>Mode</span>
+              <span style={styles.nextRoutineText}>
+                {displayedPlanningModeLabel}
+              </span>
             </div>
           </div>
+
+          <div style={styles.nextRoutineBoxFull}>
+            <span style={styles.nextRoutineLabel}>Prochaine routine</span>
+
+            {nextRoutine ? (
+              <span style={styles.nextRoutineText}>
+                {getDayLabel(nextRoutine.day_of_week)} ·{" "}
+                {formatTime(nextRoutine.start_time)} →{" "}
+                {formatTime(nextRoutine.end_time)} ·{" "}
+                {nextRoutine.title || nextRoutine.position_label}
+              </span>
+            ) : (
+              <span style={styles.nextRoutineText}>
+                Aucune routine enregistrée
+              </span>
+            )}
+          </div>
+
+          {conflicts.length > 0 && (
+            <div style={styles.conflictBox}>
+              <h3 style={styles.conflictTitle}>Conflits à vérifier</h3>
+
+              {conflicts.map((conflict) => (
+                <div key={conflict.id} style={styles.conflictItem}>
+                  <strong>{conflict.title || "Événement sans titre"}</strong>
+                  <br />
+                  {sourceLabels[conflict.source] || conflict.source} —{" "}
+                  {formatTime(conflict.start_time)} →{" "}
+                  {formatTime(conflict.end_time)}
+                  <br />
+                  Position horloge :{" "}
+                  {conflict.position_label || "Position inconnue"}
+                  <button
+                    type="button"
+                    onClick={() => handleKeepRule(conflict)}
+                    className="planning-button"
+                    style={styles.keepButton}
+                  >
+                    Garder cet événement
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="planning-card" style={styles.calendarPanel}>
@@ -601,7 +1170,9 @@ function PlanningPage() {
             </span>
           </div>
 
-          {!selectedMemberId ? (
+          {loading ? (
+            <p style={styles.emptyText}>Chargement du planning...</p>
+          ) : !selectedMemberId ? (
             <p style={styles.emptyText}>
               Sélectionnez un membre pour voir son planning.
             </p>
@@ -632,7 +1203,10 @@ function PlanningPage() {
                               style={{
                                 ...styles.ruleCard,
                                 backgroundColor: theme.backgroundColor,
-                                borderColor: theme.borderColor,
+                                borderColor:
+                                  rule.conflict_status === "conflict"
+                                    ? "#D88C35"
+                                    : theme.borderColor,
                                 color: theme.color,
                               }}
                             >
@@ -641,9 +1215,48 @@ function PlanningPage() {
                                 {formatTime(rule.end_time)}
                               </p>
 
-                              <p style={styles.rulePosition}>
-                                {rule.position_label}
+                              <p style={styles.ruleTitle}>
+                                {rule.title ||
+                                  rule.position_label ||
+                                  "Événement"}
                               </p>
+
+                              <p style={styles.rulePosition}>
+                                Position horloge :{" "}
+                                {rule.position_label || "Non définie"}
+                              </p>
+
+                              <div style={styles.badgeRow}>
+                                <span style={styles.sourceBadge}>
+                                  {sourceLabels[rule.source] || "Manuel"}
+                                </span>
+
+                                {rule.conflict_status === "conflict" && (
+                                  <span style={styles.conflictBadge}>
+                                    Conflit
+                                  </span>
+                                )}
+                              </div>
+
+                              {rule.conflict_status === "conflict" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleKeepRule(rule)}
+                                  className="planning-button"
+                                  style={styles.keepButton}
+                                >
+                                  Garder celui-ci
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteRule(rule)}
+                                className="planning-button"
+                                style={styles.deleteSmallButton}
+                              >
+                                Supprimer
+                              </button>
                             </div>
                           );
                         })
@@ -689,7 +1302,7 @@ function PlanningPage() {
                   <option value="">Choisir un membre</option>
                   {members.map((member) => (
                     <option key={member.id} value={member.id}>
-                      {member.name}
+                      {member.name} {member.role ? `(${member.role})` : ""}
                     </option>
                   ))}
                 </select>
@@ -710,11 +1323,7 @@ function PlanningPage() {
                 Jour détecté
                 <input
                   type="text"
-                  value={
-                    dayOptions.find(
-                      (day) => day.value === Number(formData.dayOfWeek)
-                    )?.label || ""
-                  }
+                  value={getDisplayedDay()}
                   readOnly
                   placeholder="Choisi automatiquement"
                   style={{
@@ -750,7 +1359,7 @@ function PlanningPage() {
               </div>
 
               <label style={styles.label}>
-                Position sur l’horloge
+                Position horloge
                 <select
                   name="positionId"
                   value={formData.positionId}
@@ -766,6 +1375,28 @@ function PlanningPage() {
                   ))}
                 </select>
               </label>
+
+              <p style={styles.helperText}>
+                Cette position correspond à l’emplacement de l’aiguille sur
+                l’horloge. Le titre de l’événement peut être différent.
+              </p>
+
+              <label style={styles.label}>
+                Titre de l’événement
+                <input
+                  type="text"
+                  name="title"
+                  value={formData.title}
+                  onChange={handleChange}
+                  placeholder="Exemple : Réunion, École, Sport..."
+                  style={styles.input}
+                />
+              </label>
+
+              <div style={styles.currentSourceBox}>
+                Source utilisée :{" "}
+                <strong>{sourceLabels[getFinalSource()]}</strong>
+              </div>
 
               <button
                 type="submit"
@@ -806,7 +1437,13 @@ function PlanningPage() {
                     <div
                       key={rule.id}
                       className="routine-row routine-row-layout"
-                      style={styles.routineRow}
+                      style={{
+                        ...styles.routineRow,
+                        borderColor:
+                          rule.conflict_status === "conflict"
+                            ? "#D88C35"
+                            : "#E6D6BF",
+                      }}
                     >
                       <div style={styles.routineDay}>
                         {getDayLabel(rule.day_of_week)}
@@ -818,6 +1455,10 @@ function PlanningPage() {
                           {formatTime(rule.end_time)}
                         </strong>
 
+                        <span style={styles.routineTitle}>
+                          {rule.title || "Événement"}
+                        </span>
+
                         <span
                           style={{
                             ...styles.positionBadge,
@@ -828,16 +1469,36 @@ function PlanningPage() {
                         >
                           {rule.position_label}
                         </span>
+
+                        <span style={styles.routineMeta}>
+                          {sourceLabels[rule.source] || "Manuel"} ·{" "}
+                          {rule.conflict_status === "conflict"
+                            ? "Conflit"
+                            : "OK"}
+                        </span>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteRule(rule.id)}
-                        className="planning-button"
-                        style={styles.deleteButton}
-                      >
-                        Supprimer
-                      </button>
+                      <div style={styles.actionColumn}>
+                        {rule.conflict_status === "conflict" && (
+                          <button
+                            type="button"
+                            onClick={() => handleKeepRule(rule)}
+                            className="planning-button"
+                            style={styles.keepButton}
+                          >
+                            Garder
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRule(rule)}
+                          className="planning-button"
+                          style={styles.deleteButton}
+                        >
+                          Supprimer
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -916,6 +1577,43 @@ const styles = {
     boxShadow: "0 10px 22px rgba(125, 107, 93, 0.12)",
   },
 
+  modePanel: {
+    backgroundColor: "rgba(255,255,255,0.9)",
+    border: "1px solid #E6D6BF",
+    borderRadius: "28px",
+    padding: "26px",
+    boxShadow: "0 20px 48px rgba(125, 107, 93, 0.1)",
+    backdropFilter: "blur(6px)",
+    marginBottom: "24px",
+  },
+
+  modeGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: "16px",
+  },
+
+  calendarActions: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "10px",
+    marginTop: "16px",
+  },
+
+  connectionBox: {
+    marginTop: "16px",
+    border: "1px solid #E6D6BF",
+    borderRadius: "18px",
+    padding: "14px",
+    backgroundColor: "#FFFCF7",
+  },
+
+  connectionLine: {
+    margin: "6px 0",
+    color: "#7D6B5D",
+    fontWeight: "700",
+  },
+
   summaryPanel: {
     background:
       "linear-gradient(135deg, rgba(255,248,234,0.94), rgba(255,255,255,0.86))",
@@ -974,6 +1672,17 @@ const styles = {
     gap: "6px",
   },
 
+  nextRoutineBoxFull: {
+    marginTop: "14px",
+    backgroundColor: "#FFFCF7",
+    border: "1px solid #E6D6BF",
+    borderRadius: "22px",
+    padding: "18px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+  },
+
   nextRoutineLabel: {
     color: "#A68A64",
     fontSize: "12px",
@@ -990,7 +1699,7 @@ const styles = {
   },
 
   memberSelect: {
-    minWidth: "210px",
+    minWidth: "230px",
     padding: "12px 14px",
     borderRadius: "16px",
     border: "1px solid #D2B48C",
@@ -1094,6 +1803,22 @@ const styles = {
     boxSizing: "border-box",
   },
 
+  helperText: {
+    margin: "8px 0 0",
+    color: "#8B6A4A",
+    fontSize: "13px",
+    fontWeight: "700",
+    lineHeight: "1.5",
+  },
+
+  warningText: {
+    margin: "12px 0 0",
+    color: "#9A6B38",
+    fontSize: "13px",
+    fontWeight: "800",
+    lineHeight: "1.5",
+  },
+
   timeGrid: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
@@ -1112,6 +1837,16 @@ const styles = {
     boxShadow: "0 10px 22px rgba(141, 170, 145, 0.28)",
   },
 
+  secondaryButton: {
+    border: "1px solid #D2B48C",
+    backgroundColor: "#FFFFFF",
+    color: "#7D6B5D",
+    padding: "11px 16px",
+    borderRadius: "14px",
+    fontWeight: "900",
+    cursor: "pointer",
+  },
+
   memberPill: {
     backgroundColor: "#F1DEC0",
     color: "#80552D",
@@ -1120,6 +1855,16 @@ const styles = {
     fontSize: "13px",
     fontWeight: "900",
     whiteSpace: "nowrap",
+  },
+
+  currentSourceBox: {
+    border: "1px solid #E6D6BF",
+    borderRadius: "16px",
+    padding: "12px",
+    backgroundColor: "#FFFCF7",
+    color: "#7D6B5D",
+    fontSize: "14px",
+    fontWeight: "800",
   },
 
   calendarGrid: {
@@ -1133,7 +1878,7 @@ const styles = {
     border: "1px solid #E6D6BF",
     borderRadius: "20px",
     overflow: "hidden",
-    minHeight: "230px",
+    minHeight: "245px",
     display: "flex",
     flexDirection: "column",
     backgroundColor: "#FFFCF7",
@@ -1181,10 +1926,82 @@ const styles = {
     fontSize: "13px",
   },
 
+  ruleTitle: {
+    margin: "6px 0 3px",
+    fontWeight: "900",
+    fontSize: "14px",
+  },
+
   rulePosition: {
-    margin: "5px 0 0",
+    margin: "0 0 8px",
     fontWeight: "800",
-    fontSize: "13px",
+    fontSize: "12px",
+    opacity: 0.85,
+  },
+
+  badgeRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "6px",
+    marginTop: "6px",
+  },
+
+  sourceBadge: {
+    display: "inline-block",
+    border: "1px solid rgba(125, 107, 93, 0.35)",
+    borderRadius: "999px",
+    padding: "3px 8px",
+    fontSize: "11px",
+    fontWeight: "900",
+    backgroundColor: "rgba(255,255,255,0.55)",
+  },
+
+  conflictBadge: {
+    display: "inline-block",
+    border: "1px solid #D88C35",
+    borderRadius: "999px",
+    padding: "3px 8px",
+    fontSize: "11px",
+    fontWeight: "900",
+    color: "#A15C00",
+    backgroundColor: "#FFF3DF",
+  },
+
+  keepButton: {
+    display: "block",
+    marginTop: "8px",
+    marginBottom: "6px",
+    padding: "7px 10px",
+    cursor: "pointer",
+    border: "1px solid #8DAA91",
+    borderRadius: "12px",
+    backgroundColor: "#EEF5EF",
+    color: "#4F7456",
+    fontSize: "12px",
+    fontWeight: "900",
+  },
+
+  deleteButton: {
+    border: "1px solid #E6D6BF",
+    backgroundColor: "#FFFFFF",
+    color: "#A15C4B",
+    padding: "10px 14px",
+    borderRadius: "14px",
+    fontWeight: "900",
+    cursor: "pointer",
+  },
+
+  deleteSmallButton: {
+    display: "block",
+    marginTop: "8px",
+    padding: "6px 9px",
+    cursor: "pointer",
+    border: "1px solid #E6D6BF",
+    borderRadius: "12px",
+    backgroundColor: "#FFFFFF",
+    color: "#A15C4B",
+    fontSize: "12px",
+    fontWeight: "900",
   },
 
   emptyDayBox: {
@@ -1242,6 +2059,18 @@ const styles = {
     color: "#6E5A4A",
   },
 
+  routineTitle: {
+    fontSize: "14px",
+    fontWeight: "800",
+    color: "#7D6B5D",
+  },
+
+  routineMeta: {
+    fontSize: "12px",
+    fontWeight: "800",
+    color: "#A68A64",
+  },
+
   positionBadge: {
     display: "inline-flex",
     width: "fit-content",
@@ -1252,14 +2081,11 @@ const styles = {
     fontWeight: "900",
   },
 
-  deleteButton: {
-    border: "1px solid #E6D6BF",
-    backgroundColor: "#FFFFFF",
-    color: "#A15C4B",
-    padding: "10px 14px",
-    borderRadius: "14px",
-    fontWeight: "900",
-    cursor: "pointer",
+  actionColumn: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: "8px",
   },
 
   emptySummary: {
@@ -1280,6 +2106,28 @@ const styles = {
   emptyText: {
     margin: "8px 0 0",
     color: "#8B6A4A",
+    fontWeight: "700",
+    lineHeight: "1.5",
+  },
+
+  conflictBox: {
+    marginTop: "18px",
+    border: "1px solid #D88C35",
+    borderRadius: "20px",
+    padding: "14px",
+    backgroundColor: "#FFF7EA",
+  },
+
+  conflictTitle: {
+    margin: "0 0 8px",
+    color: "#A15C00",
+    fontWeight: "900",
+  },
+
+  conflictItem: {
+    padding: "12px",
+    borderTop: "1px solid rgba(216,140,53,0.35)",
+    color: "#7D5A37",
     fontWeight: "700",
     lineHeight: "1.5",
   },
