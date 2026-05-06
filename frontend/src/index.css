@@ -1,11 +1,26 @@
+/* Importation des polices : Quicksand pour le côté chaleureux/rond, Outfit pour la lisibilité moderne */
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Quicksand:wght@400;500;600;700&display=swap");
+
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
+  /* Palette de couleurs Where O'Clock */
+  --cream: #fdfbf7;
+  --beige-light: #f5f1e9;
+  --beige-soft: #f6efe6;
+  --sage: #8daa91;
+  --sage-dark: #6b846e;
+  --wood: #7d6b5d;
+  --wood-dark: #4a443f;
+  --text-main: #4a443f;
+  --white: #ffffff;
+  --error: #e57373;
+  --shadow: rgba(125, 107, 93, 0.12);
+
+  font-family: "Outfit", system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.6;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color: var(--text-main);
+  background-color: var(--beige-soft);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -13,76 +28,171 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-html, body, #root {
-  height: 100%;
+html,
+body,
+#root {
+  min-height: 100%;
   margin: 0;
+  padding: 0;
 }
 
 body {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background-color: #1e1e1e;
-  margin: 0;
-  display: flex;
-  place-items: cente;
-  min-width: 320px;
+  min-height: 100vh;
+  color: var(--text-main);
+  display: block;
+  overflow-x: hidden;
+
+  background-color: #f6efe6;
+  background-image: url("./assets/Background.png");
+  background-repeat: repeat;
+  background-size: 620px 620px;
+  background-position: top left;
+  background-attachment: fixed;
+}
+
+#root {
+  position: relative;
   min-height: 100vh;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+/* Titres avec Quicksand pour un aspect plus convivial */
+h1,
+h2,
+h3,
+h4 {
+  font-family: "Quicksand", sans-serif;
+  font-weight: 700;
+  color: var(--wood);
+  margin-top: 0;
 }
 
+h1 {
+  font-size: 2.5rem;
+  line-height: 1.2;
+}
+
+/* Liens stylisés */
+a {
+  font-weight: 600;
+  color: var(--sage-dark);
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+}
+
+a:hover {
+  opacity: 0.8;
+}
+
+/* Boutons globaux */
 button {
-  border-radius: 8px;
+  font-family: "Outfit", sans-serif;
+  border-radius: 12px;
   border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
+  padding: 0.8em 1.6em;
+  font-size: 1rem;
+  font-weight: 600;
+  background-color: var(--sage);
+  color: white;
   cursor: pointer;
-  transition: border-color 0.25s;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 6px var(--shadow);
 }
+
 button:hover {
-  border-color: #646cff;
+  background-color: var(--sage-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px var(--shadow);
 }
+
+button:active {
+  transform: translateY(0);
+}
+
 button:focus,
 button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  outline: 2px solid var(--sage);
+  outline-offset: 2px;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+/* Inputs globaux */
+input,
+select,
+textarea {
+  font-family: "Outfit", sans-serif;
+  border-radius: 12px;
+  border: 1px solid var(--beige-light);
+  padding: 12px 16px;
+  font-size: 1rem;
+  background-color: var(--white);
+  color: var(--text-main);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
 }
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--sage);
+  box-shadow: 0 0 0 3px rgba(141, 170, 145, 0.2);
+}
+
+/* Classes utilitaires */
 .page-container {
   max-width: 1100px;
   margin: 0 auto;
   padding: 40px 20px;
+  position: relative;
+  z-index: 1;
 }
 
 .page-center {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+}
+
+/* Style pour les cartes */
+.card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(230, 214, 191, 0.9);
+  border-radius: 24px;
+  padding: 30px;
+  box-shadow: 0 10px 25px var(--shadow);
+  backdrop-filter: blur(6px);
+}
+
+/* Animation pulse */
+@keyframes pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  h1 {
+    font-size: 2rem;
+  }
+
+  .page-container {
+    padding: 20px 15px;
+  }
+
+  button {
+    width: 100%;
+  }
 }
