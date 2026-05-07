@@ -264,7 +264,7 @@ function AddMemberPage() {
               <input
                 className="member-input"
                 type="text"
-                placeholder="Ex : Rida"
+                placeholder="Ex : Ayoub"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
