@@ -20,10 +20,15 @@ function dbGet(sql, params = []) {
 
 function getCurrentDayAndTime() {
   const now = new Date();
+
+  // JS : 0 = dimanche, 1 = lundi, ..., 6 = samedi
   const dayOfWeek = now.getDay();
+
   const hours = String(now.getHours()).padStart(2, "0");
   const minutes = String(now.getMinutes()).padStart(2, "0");
+
   const currentTime = `${hours}:${minutes}`;
+
   return { dayOfWeek, currentTime };
 }
 
@@ -122,6 +127,8 @@ async function buildStartupClockConfig(requestedFamilyId = null) {
       ON sr.member_id = m.id
       AND sr.family_id = m.family_id
       AND sr.day_of_week = ?
+      AND COALESCE(sr.is_active, 1) = 1
+      AND COALESCE(sr.conflict_status, 'none') = 'none'
       AND (
         (
           sr.start_time <= sr.end_time
@@ -195,7 +202,9 @@ async function buildStartupClockConfig(requestedFamilyId = null) {
         label: fallbackSlot.label,
         angle: fallbackSlot.angle,
       };
+
       source = "fallback";
+
       warnings.push(
         `Aucune règle active pour "${member.name}" à ${currentTime}. Position de repli utilisée : "${fallbackSlot.label}".`
       );
@@ -208,7 +217,10 @@ async function buildStartupClockConfig(requestedFamilyId = null) {
       familyId: member.familyId,
       name: member.name,
       role: member.role,
-      servoChannel: Number(member.servoChannel),
+      servoChannel:
+        member.servoChannel === null || member.servoChannel === undefined
+          ? 0
+          : Number(member.servoChannel),
       currentSlot: Number(selectedPosition.currentSlot),
       currentPositionId: selectedPosition.positionId,
       currentLabel: selectedPosition.label,
