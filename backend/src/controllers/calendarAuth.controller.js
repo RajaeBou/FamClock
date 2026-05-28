@@ -1,4 +1,6 @@
 const db = require("../config/db");
+const { encryptToken, decryptToken } = require("../utils/crypto.utils");
+
 const {
   getGoogleAuthUrl,
   getGoogleTokensFromCode,
@@ -11,7 +13,9 @@ const {
   getOutlookCalendarEvents,
 } = require("../services/outlookCalendar.service");
 
-const { importCalendarEventsIntoSchedule } = require("../services/calendarImport.service");
+const {
+  importCalendarEventsIntoSchedule,
+} = require("../services/calendarImport.service");
 
 const run = (sql, params = []) => {
   return new Promise((resolve, reject) => {
@@ -73,6 +77,31 @@ const decodeState = (state) => {
   return JSON.parse(Buffer.from(state, "base64url").toString("utf8"));
 };
 
+/**
+ * Permet de lire un token stocké.
+ * Si le token est déjà chiffré, on le déchiffre.
+ * Si c'est un ancien token stocké en clair, on le retourne tel quel.
+ *
+ * Cela évite de casser les anciennes connexions pendant la transition.
+ * Idéalement, il faut reconnecter Google/Outlook pour que les nouveaux tokens
+ * soient stockés directement sous forme chiffrée.
+ */
+const decryptStoredToken = (storedToken) => {
+  if (!storedToken) return null;
+
+  const parts = storedToken.split(":");
+
+  if (parts.length === 3) {
+    return decryptToken(storedToken);
+  }
+
+  console.warn(
+    "Attention : ancien token détecté en clair. Reconnecter le calendrier pour le chiffrer."
+  );
+
+  return storedToken;
+};
+
 const saveConnection = async ({
   familyId,
   provider,
@@ -86,6 +115,9 @@ const saveConnection = async ({
   await ensureCalendarConnectionSchema();
 
   const now = new Date().toISOString();
+
+  const encryptedAccessToken = accessToken ? encryptToken(accessToken) : null;
+  const encryptedRefreshToken = refreshToken ? encryptToken(refreshToken) : null;
 
   const existing = await get(
     `
@@ -119,8 +151,8 @@ const saveConnection = async ({
         createId(),
         familyId,
         provider,
-        accessToken || null,
-        refreshToken || null,
+        encryptedAccessToken,
+        encryptedRefreshToken,
         expiresAt || null,
         scope || null,
         tokenType || null,
@@ -147,8 +179,8 @@ const saveConnection = async ({
         AND provider = ?
     `,
     [
-      accessToken || null,
-      refreshToken || null,
+      encryptedAccessToken,
+      encryptedRefreshToken,
       expiresAt || null,
       scope || null,
       tokenType || null,
@@ -177,7 +209,9 @@ const getConnection = async (familyId, provider) => {
 const redirectAfterOAuth = (provider, success = true) => {
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
 
-  const url = `${frontendUrl}/planning?provider=${provider}&connected=${success ? "true" : "false"}`;
+  const url = `${frontendUrl}/planning?provider=${provider}&connected=${
+    success ? "true" : "false"
+  }`;
 
   return url;
 };
@@ -288,12 +322,7 @@ const googleCallback = async (req, res) => {
 
 const importGoogleEvents = async (req, res) => {
   try {
-    const {
-      familyId,
-      memberId,
-      positionId,
-      days = 7,
-    } = req.body;
+    const { familyId, memberId, positionId, days = 7 } = req.body;
 
     if (!familyId || !memberId || !positionId) {
       return res.status(400).json({
@@ -311,9 +340,12 @@ const importGoogleEvents = async (req, res) => {
       });
     }
 
+    const accessToken = decryptStoredToken(connection.access_token);
+    const refreshToken = decryptStoredToken(connection.refresh_token);
+
     const events = await getGoogleCalendarEvents({
-      accessToken: connection.access_token,
-      refreshToken: connection.refresh_token,
+      accessToken,
+      refreshToken,
       days,
     });
 
@@ -406,12 +438,7 @@ const outlookCallback = async (req, res) => {
 
 const importOutlookEvents = async (req, res) => {
   try {
-    const {
-      familyId,
-      memberId,
-      positionId,
-      days = 7,
-    } = req.body;
+    const { familyId, memberId, positionId, days = 7 } = req.body;
 
     if (!familyId || !memberId || !positionId) {
       return res.status(400).json({
@@ -429,8 +456,10 @@ const importOutlookEvents = async (req, res) => {
       });
     }
 
+    const accessToken = decryptStoredToken(connection.access_token);
+
     const events = await getOutlookCalendarEvents({
-      accessToken: connection.access_token,
+      accessToken,
       days,
     });
 
