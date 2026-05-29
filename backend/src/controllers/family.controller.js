@@ -2,25 +2,41 @@ const bcrypt = require("bcryptjs");
 const { v4: uuidv4 } = require("uuid");
 const db = require("../config/db");
 
+const {
+  registerFailedPinAttempt,
+  resetPinAttempts,
+} = require("../middlewares/pinAttemptLimiter");
+
+const normalizeFamilyName = (familyName) => {
+  return String(familyName || "").trim().toLowerCase();
+};
+
+const normalizePin = (pin) => {
+  return String(pin || "").trim();
+};
+
+const isValidPin = (pin) => {
+  return /^\d{4}$/.test(pin);
+};
+
 const createFamily = async (req, res) => {
   try {
-    const { familyName, pin } = req.body;
+    const familyName = normalizeFamilyName(req.body.familyName);
+    const pin = normalizePin(req.body.pin);
 
     if (!familyName || !pin) {
       return res.status(400).json({
         success: false,
-        message: "familyName et pin sont obligatoires"
+        message: "familyName et pin sont obligatoires",
       });
     }
 
-    if (!/^\d{4}$/.test(pin)) {
+    if (!isValidPin(pin)) {
       return res.status(400).json({
         success: false,
-        message: "Le PIN doit contenir exactement 4 chiffres"
+        message: "Le PIN doit contenir exactement 4 chiffres",
       });
     }
-
-    const normalizedFamilyName = familyName.trim();
 
     const checkQuery = `
       SELECT id
@@ -28,19 +44,20 @@ const createFamily = async (req, res) => {
       WHERE family_name = ?
     `;
 
-    db.get(checkQuery, [normalizedFamilyName], async (checkErr, existingFamily) => {
-      if (checkErr) {
-        console.error("Erreur vérification famille existante :", checkErr.message);
+    db.get(checkQuery, [familyName], async (err, existingFamily) => {
+      if (err) {
+        console.error("Erreur vérification famille :", err.message);
+
         return res.status(500).json({
           success: false,
-          message: "Erreur serveur"
+          message: "Erreur lors de la vérification de la famille",
         });
       }
 
       if (existingFamily) {
         return res.status(409).json({
           success: false,
-          message: "Une famille avec ce nom existe déjà"
+          message: "Cette famille existe déjà",
         });
       }
 
@@ -53,47 +70,59 @@ const createFamily = async (req, res) => {
         VALUES (?, ?, ?, ?)
       `;
 
-      db.run(insertQuery, [familyId, normalizedFamilyName, pinHash, createdAt], function (err) {
-        if (err) {
-          console.error("Erreur insertion famille :", err.message);
-          return res.status(500).json({
-            success: false,
-            message: "Erreur lors de la création de la famille"
+      db.run(
+        insertQuery,
+        [familyId, familyName, pinHash, createdAt],
+        function (err) {
+          if (err) {
+            console.error("Erreur insertion famille :", err.message);
+
+            return res.status(500).json({
+              success: false,
+              message: "Erreur lors de la création de la famille",
+            });
+          }
+
+          return res.status(201).json({
+            success: true,
+            message: "Famille créée avec succès",
+            data: {
+              id: familyId,
+              familyName,
+              createdAt,
+            },
           });
         }
-
-        return res.status(201).json({
-          success: true,
-          message: "Famille créée avec succès",
-          data: {
-            id: familyId,
-            familyName: normalizedFamilyName,
-            createdAt
-          }
-        });
-      });
+      );
     });
   } catch (error) {
     console.error("Erreur createFamily :", error.message);
+
     return res.status(500).json({
       success: false,
-      message: "Erreur serveur"
+      message: "Erreur serveur lors de la création de la famille",
     });
   }
 };
 
 const loginFamily = (req, res) => {
   try {
-    const { familyName, pin } = req.body;
+    const familyName = normalizeFamilyName(req.body.familyName);
+    const pin = normalizePin(req.body.pin);
 
     if (!familyName || !pin) {
       return res.status(400).json({
         success: false,
-        message: "familyName et pin sont obligatoires"
+        message: "familyName et pin sont obligatoires",
       });
     }
 
-    const normalizedFamilyName = familyName.trim();
+    if (!isValidPin(pin)) {
+      return res.status(400).json({
+        success: false,
+        message: "Le PIN doit contenir exactement 4 chiffres",
+      });
+    }
 
     const query = `
       SELECT id, family_name, pin_hash, created_at
@@ -101,30 +130,53 @@ const loginFamily = (req, res) => {
       WHERE family_name = ?
     `;
 
-    db.get(query, [normalizedFamilyName], async (err, family) => {
+    db.get(query, [familyName], async (err, family) => {
       if (err) {
         console.error("Erreur recherche famille :", err.message);
+
         return res.status(500).json({
           success: false,
-          message: "Erreur serveur"
+          message: "Erreur lors de la connexion",
         });
       }
 
       if (!family) {
-        return res.status(404).json({
-          success: false,
-          message: "Famille introuvable"
-        });
-      }
+        const attempt = registerFailedPinAttempt(req);
 
-      const isPinValid = await bcrypt.compare(pin, family.pin_hash);
+        if (attempt.blocked) {
+          return res.status(429).json({
+            success: false,
+            message:
+              "Trop de tentatives incorrectes. L'accès est bloqué pendant 15 minutes.",
+          });
+        }
 
-      if (!isPinValid) {
         return res.status(401).json({
           success: false,
-          message: "PIN incorrect"
+          message: `Famille ou PIN incorrect. Il vous reste ${attempt.remainingAttempts} essai(s).`,
         });
       }
+
+      const isPinCorrect = await bcrypt.compare(pin, family.pin_hash);
+
+      if (!isPinCorrect) {
+        const attempt = registerFailedPinAttempt(req);
+
+        if (attempt.blocked) {
+          return res.status(429).json({
+            success: false,
+            message:
+              "Trop de tentatives incorrectes. L'accès est bloqué pendant 15 minutes.",
+          });
+        }
+
+        return res.status(401).json({
+          success: false,
+          message: `PIN incorrect. Il vous reste ${attempt.remainingAttempts} essai(s).`,
+        });
+      }
+
+      resetPinAttempts(req);
 
       return res.status(200).json({
         success: true,
@@ -132,20 +184,21 @@ const loginFamily = (req, res) => {
         data: {
           id: family.id,
           familyName: family.family_name,
-          createdAt: family.created_at
-        }
+          createdAt: family.created_at,
+        },
       });
     });
   } catch (error) {
     console.error("Erreur loginFamily :", error.message);
+
     return res.status(500).json({
       success: false,
-      message: "Erreur serveur"
+      message: "Erreur serveur lors de la connexion",
     });
   }
 };
 
 module.exports = {
   createFamily,
-  loginFamily
+  loginFamily,
 };
