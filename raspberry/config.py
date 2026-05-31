@@ -21,16 +21,13 @@ PCA9685_ADDRESS = int(os.getenv("PCA9685_ADDRESS", "0x40"), 16)
 
 MOVE_DELAY_SECONDS = float(os.getenv("MOVE_DELAY_SECONDS", "0.8"))
 
-# IMPORTANT :
-# 0 = vrais servos
-# 1 = simulation uniquement
+
 USE_MOCK_SERVO = os.getenv("USE_MOCK_SERVO", "0") == "1"
 
 FLASK_HOST = os.getenv("FLASK_HOST", "0.0.0.0")
 FLASK_PORT = int(os.getenv("FLASK_PORT", "5050"))
 FLASK_DEBUG = os.getenv("FLASK_DEBUG", "1") == "1"
 
-# Port du Pico
 PICO_SERIAL_PORT = os.getenv("PICO_SERIAL_PORT", "COM3")
 PICO_BAUDRATE = int(os.getenv("PICO_BAUDRATE", "115200"))
 PICO_SERIAL_TIMEOUT = float(os.getenv("PICO_SERIAL_TIMEOUT", "2.0"))
