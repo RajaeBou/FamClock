@@ -732,11 +732,30 @@ function PlanningPage() {
       (position) => position.id === formData.positionId
     );
 
+    /*
+      Vérification côté frontend :
+      si une date de référence est choisie, on empêche la création
+      d'une routine dont la date et l'heure de début sont déjà passées.
+    */
+    const selectedDateTime = formData.referenceDate
+      ? new Date(`${formData.referenceDate}T${formData.startTime}:00`)
+      : null;
+
+    if (selectedDateTime && selectedDateTime < new Date()) {
+      setMessage("Impossible de créer un planning dans le passé.");
+      clearMessageAfterDelay();
+      return;
+    }
+
     try {
       await api.post("/schedule-rules", {
         familyId,
         memberId: formData.memberId,
         dayOfWeek: Number(formData.dayOfWeek),
+
+        // Important : la date est envoyée au backend pour permettre la validation serveur.
+        date: formData.referenceDate || null,
+
         startTime: formData.startTime,
         endTime: formData.endTime,
         positionId: formData.positionId,

@@ -1,6 +1,8 @@
 const db = require("../config/db");
 const { v4: uuidv4 } = require("uuid");
 
+const { isDateTimeInPast } = require("../utils/schedule.utils");
+
 const VALID_SOURCES = ["manual", "google", "outlook"];
 const VALID_PLANNING_MODES = ["manual_only", "external_only", "hybrid"];
 const VALID_PROVIDERS = ["none", "google", "outlook"];
@@ -50,6 +52,11 @@ const normalizeTime = (value) => {
 
 const isValidTime = (value) => {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+};
+
+const isValidDate = (value) => {
+  if (!value) return true;
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value).trim());
 };
 
 const hasOverlap = (startA, endA, startB, endB) => {
@@ -186,6 +193,7 @@ const createScheduleRule = async (req, res) => {
       familyId,
       memberId,
       dayOfWeek,
+      date,
       startTime,
       endTime,
       positionId,
@@ -202,6 +210,7 @@ const createScheduleRule = async (req, res) => {
     const finalPlanningMode = planningMode || "manual_only";
     const finalProvider =
       provider || (finalSource === "manual" ? "none" : finalSource);
+    const finalDate = date ? String(date).trim() : null;
 
     if (
       !familyId ||
@@ -228,6 +237,20 @@ const createScheduleRule = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "L'heure de début doit être inférieure à l'heure de fin",
+      });
+    }
+
+    if (finalDate && !isValidDate(finalDate)) {
+      return res.status(400).json({
+        success: false,
+        message: "La date doit être au format YYYY-MM-DD",
+      });
+    }
+
+    if (finalDate && isDateTimeInPast(finalDate, finalStartTime)) {
+      return res.status(400).json({
+        success: false,
+        message: "La règle de planning ne peut pas être dans le passé",
       });
     }
 
@@ -861,8 +884,8 @@ const resolveScheduleConflict = async (req, res) => {
                 conflict_resolution = ?,
                 is_active = 0,
                 updated_at = ?
-            WHERE id = ?
-          `,
+          WHERE id = ?
+        `,
           [action, now, rule.conflict_with_id]
         );
       }
