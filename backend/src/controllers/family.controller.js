@@ -16,7 +16,14 @@ const normalizePin = (pin) => {
 };
 
 const isValidPin = (pin) => {
-  return /^\d{4}$/.test(pin);
+  const value = normalizePin(pin);
+
+  const hasMinLength = value.length >= 12;
+  const hasMaxLength = value.length <= 128;
+  const hasLetter = /[A-Za-zÀ-ÿ]/.test(value);
+  const hasNumber = /\d/.test(value);
+
+  return hasMinLength && hasMaxLength && hasLetter && hasNumber;
 };
 
 const createFamily = async (req, res) => {
@@ -27,14 +34,15 @@ const createFamily = async (req, res) => {
     if (!familyName || !pin) {
       return res.status(400).json({
         success: false,
-        message: "familyName et pin sont obligatoires",
+        message: "familyName et mot de passe familial sont obligatoires",
       });
     }
 
     if (!isValidPin(pin)) {
       return res.status(400).json({
         success: false,
-        message: "Le PIN doit contenir exactement 4 chiffres",
+        message:
+          "Le mot de passe familial doit contenir au moins 12 caractères, avec au moins une lettre et un chiffre.",
       });
     }
 
@@ -62,7 +70,7 @@ const createFamily = async (req, res) => {
       }
 
       const familyId = uuidv4();
-      const pinHash = await bcrypt.hash(pin, 10);
+      const pinHash = await bcrypt.hash(pin, 12);
       const createdAt = new Date().toISOString();
 
       const insertQuery = `
@@ -113,14 +121,15 @@ const loginFamily = (req, res) => {
     if (!familyName || !pin) {
       return res.status(400).json({
         success: false,
-        message: "familyName et pin sont obligatoires",
+        message: "familyName et mot de passe familial sont obligatoires",
       });
     }
 
     if (!isValidPin(pin)) {
       return res.status(400).json({
         success: false,
-        message: "Le PIN doit contenir exactement 4 chiffres",
+        message:
+          "Le mot de passe familial doit contenir au moins 12 caractères, avec au moins une lettre et un chiffre.",
       });
     }
 
@@ -153,7 +162,7 @@ const loginFamily = (req, res) => {
 
         return res.status(401).json({
           success: false,
-          message: `Famille ou PIN incorrect. Il vous reste ${attempt.remainingAttempts} essai(s).`,
+          message: `Identifiants incorrects. Il vous reste ${attempt.remainingAttempts} essai(s).`,
         });
       }
 
@@ -172,7 +181,7 @@ const loginFamily = (req, res) => {
 
         return res.status(401).json({
           success: false,
-          message: `PIN incorrect. Il vous reste ${attempt.remainingAttempts} essai(s).`,
+          message: `Identifiants incorrects. Il vous reste ${attempt.remainingAttempts} essai(s).`,
         });
       }
 

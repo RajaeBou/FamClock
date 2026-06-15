@@ -7,7 +7,14 @@ const normalizePin = (pin) => {
 };
 
 const isValidPin = (pin) => {
-  return /^\d{4}$/.test(normalizePin(pin));
+  const value = normalizePin(pin);
+
+  const hasMinLength = value.length >= 12;
+  const hasMaxLength = value.length <= 128;
+  const hasLetter = /[A-Za-zÀ-ÿ]/.test(value);
+  const hasNumber = /\d/.test(value);
+
+  return hasMinLength && hasMaxLength && hasLetter && hasNumber;
 };
 
 module.exports = {

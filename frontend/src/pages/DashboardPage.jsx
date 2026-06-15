@@ -11,6 +11,9 @@ const MINI_OUTER_R = 175;
 const MINI_INNER_R = 62;
 const MINI_SEGMENT_COUNT = 8;
 
+// Décalage du mini cadran : P1 est centré en haut comme le 12 d'une horloge.
+const MINI_SEGMENT_OFFSET = -22.5;
+
 const f = (n) => Number(n).toFixed(2);
 
 const getMiniPoint = (angleDeg, radius, offset = 0) => {
@@ -60,8 +63,8 @@ const getMiniPuzzleEdge = (angle, reverse, sign) => {
 };
 
 const createMiniSegmentPath = (index) => {
-  const startAngle = index * 45;
-  const endAngle = (index + 1) * 45;
+  const startAngle = index * 45 + MINI_SEGMENT_OFFSET;
+  const endAngle = (index + 1) * 45 + MINI_SEGMENT_OFFSET;
 
   const pStartOut = getMiniPoint(startAngle, MINI_OUTER_R);
   const pEndOut = getMiniPoint(endAngle, MINI_OUTER_R);
@@ -598,10 +601,10 @@ function DashboardPage() {
                       label: `P${index + 1}`,
                     }))
                 ).map((position, index) => {
-                  const midAngle = index * 45 + 22.5;
+                  const midAngle = index * 45;
                   const textPos = getMiniPoint(midAngle, 121);
                   const numberPos = getMiniPoint(
-                    midAngle - 13,
+                    midAngle,
                     MINI_OUTER_R - 17
                   );
                   const lines = splitMiniLabel(position.label);
@@ -1132,4 +1135,4 @@ const styles = {
   },
 };
 
-export default DashboardPage;
+export default DashboardPage; 
