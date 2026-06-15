@@ -77,7 +77,6 @@ function LoginPage() {
             animation: fadeUpLogin 0.45s ease-out;
           }
 
-
           .login-input:focus {
             border-color: #8DAA91 !important;
             box-shadow: 0 0 0 4px rgba(141, 170, 145, 0.16);
@@ -129,14 +128,15 @@ function LoginPage() {
           </div>
 
           <div style={styles.inputGroup}>
-            <label style={styles.label}>Code PIN</label>
+            <label style={styles.label}>Mot de passe familial</label>
             <input
               className="login-input"
               type="password"
-              placeholder="••••"
+              placeholder="Mot de passe familial"
               value={pin}
               onChange={(e) => setPin(e.target.value)}
-              maxLength={4}
+              minLength={12}
+              maxLength={128}
               style={styles.input}
               required
             />
@@ -216,7 +216,7 @@ const styles = {
     position: "relative",
     zIndex: 2,
     width: "200px",
-    height: "200pxpx",
+    height: "200px",
     objectFit: "contain",
     filter: "drop-shadow(0 12px 22px rgba(86, 64, 45, 0.12))",
   },

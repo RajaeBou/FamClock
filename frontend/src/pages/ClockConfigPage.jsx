@@ -8,6 +8,9 @@ const OUTER_R = 300;
 const INNER_R = 110;
 const SEGMENT_COUNT = 8;
 
+// Décalage du cadran : P1 est maintenant centré en haut comme le 12 d'une horloge.
+const SEGMENT_OFFSET = -22.5;
+
 const f = (n) => Number(n).toFixed(2);
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -59,8 +62,8 @@ const getPuzzleEdge = (angle, reverse, sign) => {
 };
 
 const createSegmentPath = (index) => {
-  const startAngle = index * 45;
-  const endAngle = (index + 1) * 45;
+  const startAngle = index * 45 + SEGMENT_OFFSET;
+  const endAngle = (index + 1) * 45 + SEGMENT_OFFSET;
 
   const pStartOut = getPoint(startAngle, OUTER_R);
   const pEndOut = getPoint(endAngle, OUTER_R);
@@ -564,10 +567,10 @@ function ClockConfigPage() {
                 />
 
                 {positions.slice(0, SEGMENT_COUNT).map((position, index) => {
-                  const midAngle = index * 45 + 22.5;
+                  const midAngle = index * 45;
 
                   const textPos = getPoint(midAngle, 205);
-                  const numPos = getPoint(midAngle - 14, OUTER_R - 24);
+                  const numPos = getPoint(midAngle, OUTER_R - 24);
 
                   const isHovered = hoveredPosition === position.id;
 

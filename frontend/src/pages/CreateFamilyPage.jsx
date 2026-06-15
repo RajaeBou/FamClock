@@ -44,14 +44,15 @@ function CreateFamilyPage() {
           style={styles.input}
         />
 
-        <input
-          type="password"
-          placeholder="PIN à 4 chiffres"
-          value={pin}
-          onChange={(e) => setPin(e.target.value)}
-          maxLength={4}
-          style={styles.input}
-        />
+<input
+  type="password"
+  placeholder="Mot de passe familial"
+  value={pin}
+  onChange={(e) => setPin(e.target.value)}
+  minLength={12}
+  maxLength={128}
+  style={styles.input}
+/>
 
         <button type="submit" style={styles.button}>
           Créer
